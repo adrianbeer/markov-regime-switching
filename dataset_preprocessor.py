@@ -28,7 +28,7 @@ data = pd.to_numeric(data)
 SP_TR_df = data
 
 print(np.log(SP_TR_df).diff().dropna().describe())
-plt.hist(np.log(SP_TR_df).diff().dropna(), bins="scott")
+plt.hist(np.log(SP_TR_df).diff().dropna(), bins="scott", title="Distribution of S&P log returns")
 plt.show()
 
 plt.plot(np.log(SP_TR_df))
@@ -63,7 +63,7 @@ indicator_df = np.log(FRED_df).diff().dropna()
 
 # Principle Component analysis
 # ----------------------------
-plt.plot(indicator_df, linewidth=0.5)
+plt.plot(indicator_df, linewidth=0.5, title="First Principle Component")
 plt.show()
 
 pca = PCA(1)
