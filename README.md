@@ -28,17 +28,16 @@ to estimate the regime.
 
 (?) Can we use a custom loss function, where only the density of one indicator (S&P) is considered?
 
-# Data Source
-Data set provided by Robert Shiller: [Stock market data](http://www.econ.yale.edu/~shiller/data.htm)
-=======
 # Usage
-Donwload the data specified in [Data Source](#Data-Source) to some folder.
-Go to the [configuration file](config.py) and set `data_dir` to that folder.
+1. Download the data specified in [Data Source](#Data-Source) to some folder.
+2. Copy [the sample config file](config-sample.py) to `config.py` and set value appropriately.
 
 
-# Data Source (with Great Depression)
+# Data Sources (with Great Depression)
 - S&P data set by Robert Shiller: [Website](http://www.econ.yale.edu/~shiller/data.htm),
 [Download](http://www.econ.yale.edu/~shiller/data/ie_data.xls). **The stock price data are monthly averages of daily closing prices.**
+## Fred Data Sources
+All FRED data sources were downloaded in `.csv` format.
 - Industrial Production Total Index: [Website](https://fred.stlouisfed.org/series/INDPRO), downloaded as `.csv`.
 - Moody's Seasoned Baa Corporate Bond Yield (BAA) [Website](https://fred.stlouisfed.org/series/BAA)
 - Moody's Seasoned Aaa Corporate Bond Yield (AAA) [Website](https://fred.stlouisfed.org/series/AAA)
