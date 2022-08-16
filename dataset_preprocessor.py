@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA
 
 from config import data_dir
 
-# Schiller S&P TR
+# Extract data from Shiller's dataset.
 # ----------------
 path = os.path.join(data_dir , "ie_data.xls")
 xls = pd.ExcelFile(path, engine="xlrd")
@@ -21,17 +21,25 @@ data.iloc[:, 0] = data.iloc[:, 0].apply(lambda x: x.replace(".1", ".10") if len(
 data.iloc[:, 0] = data.iloc[:, 0].apply(lambda x: str(x)[:7]+".01")
 data['Datetime'] = pd.to_datetime(data.iloc[:, 0], format="%Y.%m.%d")
 data = data.set_index('Datetime').sort_index()
+# Data for some month-date represents average of that month and so it should be mapped to the last day of the month.
+data = data.resample("M").last()
 
 
-data = (data.iloc[:, 1])# / data.iloc[:, 4]
-data = pd.to_numeric(data)
-SP_TR_df = data
+PRICE = pd.to_numeric(data.loc[:, "Price.1"])  # Real Total Return Prices
+CPI = pd.to_numeric(data.loc[:, "CPI"])  # CPI
 
-print(np.log(SP_TR_df).diff().dropna().describe())
-plt.hist(np.log(SP_TR_df).diff().dropna(), bins="scott", title="Distribution of S&P log returns")
+PRICE.to_pickle(os.path.join(data_dir, f"PRICE.pkl"))
+
+#INFLATION = CPI.pct_change()
+#INFLATION.name = "Inflation"
+
+print(np.log(PRICE).diff().dropna().describe())
+plt.hist(np.log(PRICE).diff().dropna(), bins="scott")
+plt.title("Distribution of S&P log returns")
 plt.show()
 
-plt.plot(np.log(SP_TR_df))
+plt.plot(np.log(PRICE))
+plt.title("Log of Total Return S&P")
 plt.show()
 
 # FRED Data sets
@@ -42,58 +50,79 @@ for f_name in ["BAA", "AAA"]:
     df = pd.read_csv(path)
     df["DATE2"] = pd.to_datetime(df.pop("DATE"))
     df = df.set_index("DATE2")
+    # The data points for monthly FRED time series initially "<M>.01", but they are only available at the end of the
+    # month, so we need to reassign the dates to the end of the month.
+    df = df.resample("M").last()
     dfs.append(df)
-
-# Feature engineering
-# --------------------
 FRED_df = pd.concat(dfs, axis=1, join="inner")
-FRED_df["SPREAD"] = (FRED_df["BAA"] - FRED_df["AAA"])
-FRED_df = FRED_df.drop(columns=["AAA"])
-indicator_df = np.log(FRED_df).diff().dropna()
+
+
+# Merging Indicators (EXOG) and Feature Engineering
+# -------------------------------------------------
+EXOG = pd.concat([CPI, FRED_df], axis=1).dropna()
+EXOG["SPREAD"] = (EXOG["BAA"] - EXOG["AAA"])
+EXOG = EXOG.drop(columns=["AAA"])
+EXOG = np.log(EXOG).diff().dropna()
+
+# Standardization
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+data_scaled = scaler.fit(EXOG).transform(EXOG)
+EXOG = pd.DataFrame(data_scaled, columns=EXOG.columns, index=EXOG.index)
 
 # Show data
 # --------------
 # f, ax = plt.subplots(1,1)
-# ax.plot(np.log(SP_TR_df))
+# ax.plot(np.log(PRICE))
 #
 # ax2 = ax.twinx()
-# ax2.plot(np.log(FRED_df), color='green', linestyle='dashed')
+# ax2.plot(np.log(EXOG), color='green', linestyle='dashed')
 # plt.show()
 
 
 # Principle Component analysis
 # ----------------------------
-plt.plot(indicator_df, linewidth=0.5, title="First Principle Component")
+plt.plot(EXOG, linewidth=0.5)
+plt.title("Indicators")
+plt.legend(EXOG.columns)
 plt.show()
 
 pca = PCA(1)
-pca.fit(indicator_df)
-component = pd.Series(index=indicator_df.index, data=pca.transform(indicator_df).flatten())
+pca.fit(EXOG)
+component = pd.Series(index=EXOG.index, data=pca.transform(EXOG).flatten())
 length = len(component)
 
 #plt.close()
-plt.plot(component, label="1st PC", linewidth=0.5)
-plt.plot(np.log(SP_TR_df).diff()[-length:], linewidth=0.5)
+plt.plot(component, label="First Principle Component", linewidth=0.5)
+plt.plot(np.log(PRICE).diff()[-length:], linewidth=0.5, label="Log returns TR S&P")
 plt.axhline(0, color='red')
 plt.legend()
 plt.show()
 
-print(np.corrcoef(np.log(SP_TR_df).diff()[-length:], component))
+print(np.corrcoef(np.log(PRICE).diff()[-length:], component))
 
-# Testing the Autoregressive assumption on the dynamic factor component
+
+# Testing usefulness of the main PC
+
+
+
+# Testing Forecastability of the main PC
 # ----------------------------------------------------------------------
 import statsmodels.api as sm
 from statsmodels.stats.diagnostic import het_white
 
-exog = np.vstack((np.repeat(1, len(component)-2), component[:-2], component[1:-1])).T
+ols_exog = np.vstack((np.repeat(1, len(component)-2), component[:-2], component[1:-1])).T
 
-ar = sm.OLS(component[2:], exog).fit()
+ar = sm.OLS(component[2:], ols_exog).fit()
 print(ar.params)
 print(ar.pvalues)
 plt.plot(ar.resid)
+plt.title("Residuals of a AR(1) estimation of the dynamic factor component")
 plt.show()
 
-_, lm_p, _, f_p = het_white(ar.resid, exog)
+# Check for heteroskedasticity and normality of the residuals.
+
+_, lm_p, _, f_p = het_white(ar.resid, ols_exog)
 print(lm_p)
 print(f_p)
 
