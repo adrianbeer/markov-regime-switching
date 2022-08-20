@@ -104,7 +104,7 @@ print(np.corrcoef(log_returns[-length:], component))
 
 # Aligning exogeneous indicator with log_returns and export
 common_idx = log_returns.index.intersection(component.index)
-log_returns.loc[common_idx].to_pickle(os.path.join(data_dir, f"Y.pkl"))
+log_returns.loc[common_idx].to_pickle(os.path.join(data_dir, f"LOG_RETURNS.pkl"))
 X = component.loc[common_idx].copy().to_frame()
 X.insert(0, "Intercept", 1)
 X.to_pickle(os.path.join(data_dir, f"X.pkl"))
