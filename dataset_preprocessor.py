@@ -26,15 +26,16 @@ data = data.resample("M").last()
 
 
 PRICE = pd.to_numeric(data.loc[:, "Price.1"])  # Real Total Return Prices
-CPI = pd.to_numeric(data.loc[:, "CPI"])  # CPI
+log_returns = np.log(PRICE).diff()
 
-PRICE.to_pickle(os.path.join(data_dir, f"PRICE.pkl"))
+
+CPI = pd.to_numeric(data.loc[:, "CPI"])  # CPI
 
 #INFLATION = CPI.pct_change()
 #INFLATION.name = "Inflation"
 
-print(np.log(PRICE).diff().dropna().describe())
-plt.hist(np.log(PRICE).diff().dropna(), bins="scott")
+print(log_returns.dropna().describe())
+plt.hist(log_returns.dropna(), bins="scott")
 plt.title("Distribution of S&P log returns")
 plt.show()
 
@@ -94,12 +95,19 @@ length = len(component)
 
 #plt.close()
 plt.plot(component, label="First Principle Component", linewidth=0.5)
-plt.plot(np.log(PRICE).diff()[-length:], linewidth=0.5, label="Log returns TR S&P")
+plt.plot(log_returns[-length:], linewidth=0.5, label="Log returns TR S&P")
 plt.axhline(0, color='red')
 plt.legend()
 plt.show()
 
-print(np.corrcoef(np.log(PRICE).diff()[-length:], component))
+print(np.corrcoef(log_returns[-length:], component))
+
+# Aligning exogeneous indicator with log_returns and export
+common_idx = log_returns.index.intersection(component.index)
+log_returns.loc[common_idx].to_pickle(os.path.join(data_dir, f"Y.pkl"))
+X = component.loc[common_idx].copy().to_frame()
+X.insert(0, "Intercept", 1)
+X.to_pickle(os.path.join(data_dir, f"X.pkl"))
 
 
 # Testing usefulness of the main PC
