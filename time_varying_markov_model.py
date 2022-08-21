@@ -16,8 +16,11 @@ assert X.index.equals(Y.index)
 # Parameters etc.
 T = len(Y)
 #theta
-beta0 = (-0.01, -0.01)
-beta1 = (0.01, 0.01)
+beta0 = (-0.5, -0.5)
+beta1 = (0.5, 0.5)
+
+alpha0 = (0.005, 0.04)
+alpha1 = (-0.002, 0.1)
 
 # probability of state1 being 0
 p_first_state_0 = 0.8
@@ -29,9 +32,9 @@ def conditional_density(y, s: bool, alpha0, alpha1):
     # phi0 is the parameter  vector for state 0
     # phi1 is the parameter vector for state 1
     if s == 1:
-        return norm.pdf(y, loc=alpha1)
+        return norm.pdf(y, loc=alpha1[0], scale=alpha1[1])
     else:
-        return norm.pdf(y, loc=alpha0)
+        return norm.pdf(y, loc=alpha0[0], scale=alpha0[1])
 
 
 def transition_probabilities(x, beta0, beta1):
@@ -43,8 +46,8 @@ def transition_probabilities(x, beta0, beta1):
 
 
 # 1. Calculate sequence of filtered marginal densities and trans. probs.
-FMYD1 = conditional_density(Y, 0, 0.5, -0.5)
-FMYD2 = conditional_density(Y, 1, 0.5, -0.5)
+FMYD1 = conditional_density(Y, 0, alpha0, alpha1)
+FMYD2 = conditional_density(Y, 1, alpha0, alpha1)
 FMYD_df = pd.DataFrame({0:FMYD1, 1:FMYD2}, index=Y.index) # FMYD.loc[t, <state_t>]
 FMYD = FMYD_df.to_numpy()
 
@@ -54,7 +57,7 @@ TPM = TPM.reshape(TPM.shape[0], 2, 2)
 TPM_df = pd.DataFrame(index=X.index, columns=pd.MultiIndex.from_product([[0,1], [0,1]]), data=TPM.reshape(TPM.shape[0], 4))
 assert (TPM_df.sum(axis=1) - 2 < 0.001).all()
 # TPM.loc[t, (<state_t>, <state_t+1>)])
-
+print(TPM_df.head())
 
 # 2. Calculate Filtered joint state probabilities
 # 2a. Calculate joint conditional distribution of (y_t, s_t, s_{t-1})
@@ -96,33 +99,44 @@ assert ((FILT_STATE_PROB[1:].sum(axis=1) - 1) < 0.001).all()
 # FILT_STATE_PROB.loc[<t>, (state_t-1, state_t)]
 
 
+def get_SJSP_T(t, T, SJSP_t_start, fmyd, tpm, cond_lik):
+    sjsp_t = SJSP_t_start.copy()
+    for tau in range(t + 2, T):
+        SJSP_new = np.zeros(shape=(2, 2))
+        for s_tau, s_taum1 in pd.MultiIndex.from_product([[0, 1], [0, 1]]):
+            SJSP_new[s_taum1][s_tau] = (fmyd[tau][s_tau] * tpm[tau - 1][s_taum1][s_tau] * 
+                                        (sjsp_t[0][s_taum1] + sjsp_t[1][s_taum1])) / cond_lik[tau]
+        sjsp_t = SJSP_new.copy()
+        DEBUG = sjsp_t.sum().sum() # This never really changes! WHY???
+    return sjsp_t.copy()
+
+
 # GIVEN
 def calculate_smoothed_joint_state_probs():
     SJSP = np.ndarray(shape=(TPM.shape[0], 2, 2))  # SJSP_t[s_prev][s_next]
-    for t in range(2,T):
-        s = time.time()
+
+    for t in range(7,8):
+        print(f"t: {t}")
         for s_t, s_tm1 in pd.MultiIndex.from_product([[0,1], [0,1]]):
             # 3 Calculate the smoothed joint state probabilities
             # 3a.
             SJSP_t = np.zeros(shape=(2, 2))
             for s_tp1 in [0, 1]:
-                SJSP_t[s_t][s_tp1] += FMYD[t+1][s_tp1] * TPM[t][s_t][s_tp1] * \
-                    FILT_STATE_PROB.loc[Y.index[t], (s_tm1, s_t)] / COND_LIK[t+1]
+                SJSP_t[s_t][s_tp1] += (FMYD[t+1][s_tp1] * TPM[t][s_t][s_tp1] *
+                                       FILT_STATE_PROB.loc[Y.index[t], (s_tm1, s_t)] / COND_LIK[t+1])
 
-            for tau in range(t+2, T):
-                SJSP_new = np.zeros(shape=(2, 2))
-                for s_tau, s_taum1 in pd.MultiIndex.from_product([[0,1], [0,1]]):
-                    SJSP_new[s_taum1][s_tau] = (FMYD[tau][s_tau] * TPM[tau-1][s_taum1][s_tau] * (SJSP_t[0][s_taum1] + SJSP_t[1][s_taum1])) / COND_LIK[tau]
-                SJSP_t = SJSP_new
+            SJSP_T = get_SJSP_T(t, T, SJSP_t, FMYD, TPM, COND_LIK)
 
-            # 3b.
-            # Smoothed joint state probability
-            SJSP[t][s_tm1][s_t] = SJSP_t.sum().sum()
-        e = time.time()
-        print(e-s)
+            # 3b. Smoothed joint state probability
+            SJSP[t][s_tm1][s_t] = SJSP_T.sum().sum()
+
     return SJSP
 
 
+#if __name__ == "__main__":
+s = time.time()
 SJSP = calculate_smoothed_joint_state_probs()
-print(SJSP[2])
-print(SJSP[2].sum().sum())
+e = time.time()
+print(e - s)
+
+print(SJSP[3:8])
