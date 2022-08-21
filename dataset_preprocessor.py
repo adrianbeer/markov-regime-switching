@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
-
+import feather
 from config import data_dir
 
 # Extract data from Shiller's dataset.
@@ -27,7 +27,9 @@ data = data.resample("M").last()
 
 PRICE = pd.to_numeric(data.loc[:, "Price.1"])  # Real Total Return Prices
 log_returns = np.log(PRICE).diff()
-
+print(log_returns.describe())
+plt.plot(np.abs(log_returns))
+plt.show()
 
 CPI = pd.to_numeric(data.loc[:, "CPI"])  # CPI
 
@@ -105,6 +107,7 @@ print(np.corrcoef(log_returns[-length:], component))
 # Aligning exogeneous indicator with log_returns and export
 common_idx = log_returns.index.intersection(component.index)
 log_returns.loc[common_idx].to_pickle(os.path.join(data_dir, f"LOG_RETURNS.pkl"))
+
 X = component.loc[common_idx].copy().to_frame()
 X.insert(0, "Intercept", 1)
 X.to_pickle(os.path.join(data_dir, f"X.pkl"))
