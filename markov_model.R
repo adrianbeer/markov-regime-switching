@@ -9,12 +9,14 @@ lret = diff(log(price))[-1,]
 plot(lret)
 
 
+lret = lret*100
+
 split_idx = round(length(lret)*0.9)
+y = lret
 train_y = lret[1:split_idx]
 test_y = lret[(1+split_idx):length(lret)]
 
-real_vola = abs(lret*100)
-
+real_vol = abs(lret)
 
 
 #HMM
@@ -22,28 +24,74 @@ library("MSGARCH")
 
 # SINGLE REGIME
 
+# ---------------------- Training the models -----------------------------------
+# ------------------------------------------------------------------------------
+
+
 
 # MULTI-REGIME (non-switching shape)
 ms2.garch.n <- CreateSpec(variance.spec = list(model = c("tGARCH", "tGARCH")),
                    distribution.spec = list(distribution = c("sged", "sged")))
 summary(ms2.garch.n)
-fit.ml <- FitML(spec = ms2.garch.n, data = train_y*100)
+fit.ml <- FitML(spec = ms2.garch.n, data = train_y)
 summary(fit.ml)
 
-fit.mcmc <- FitMCMC(spec = ms2.garch.n, data = train_y)
-summary(fit.mcmc)
-
-# Forecasting
-last_date = 10
-pred <- predict(fit.ml, nahead = 5, do.return.draw = TRUE, newdata=test_y[0:last_date])
-
-date = index(pred$draw[1, ])
-date
-lret[date]
 
 
-pred <- predict(fit.mcmc, nahead = 1, do.return.draw = FALSE)
-pred
+# ---------------------- Creating Point Forecasts ------------------------------
+# ------------------------------------------------------------------------------
+horizons = c(1,5)
+fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
+               order.by = index(test_y))
+names(fcst) = sapply(horizons, function(x) paste("h_d", toString(x)))
+
+
+for (dd in 1:length(test_y)) {
+  pred <- predict(fit.ml, nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
+  fcst[dd,] = pred$vol[horizons]
+}  
+msgarch_fcst <- fcst
+
+plot(msgarch_fcst[, 2])
+lines(msgarch_fcst[, 1])
+lines(real_vol[index(msgarch_fcst)], col="red")
+
+
+# --------------- Point Forecast evaluation etc. -------------------------------
+# ------------------------------------------------------------------------------
+
+f_mse <- function(y_hat, y) {
+  return (mean((y_hat - y)^2))
+}
+f_mae <- function(y_hat, y) {
+  return (mean(abs(y_hat - y)))
+}
+f_rmse <- function(y_hat, y) {
+  return (sqrt(f_mse(y_hat, y)))
+}
+get_err_table <- function(y_hat, y) {
+  mse <- sapply(y_hat, f_mse, y)
+  mae <- sapply(y_hat, f_mae, y)
+  rmse <- sapply(y_hat, f_rmse, y)
+  
+  err_table <- cbind(mse, mae, rmse)
+  return(err_table)
+}
+
+msgarch_err <- get_err_table(fcst, real_vol[index(msgarch_fcst)])
+naive_err <- get_err_table(mean(real_vol), real_vol[index(msgarch_fcst)])
+
+
+# --------------- Scenario Forecast evaluation etc. ----------------------------
+# --------------- Latent State evaluation --------------------------------------
+# ------------------------------------------------------------------------------
+
+
+
+
+
+
+
 
 
 

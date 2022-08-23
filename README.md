@@ -18,8 +18,11 @@ defined subsamples.
    [We want to evaluate density forecasts, so we will use loss functions such as CRPS aswell.]
 
 # 2. TODO
+- Use oxford realized values to evaluate volatility forecasts.
+- Use code from ATSA to get the best static fat-tailed distribution to describe vola.
+
 - Use PCA and extract dynamic factor, then research if the dynamic factor can be forecasted usefully,
-then try to use that factor in a markov switching model (parameter).
+  then try to use that factor in a markov switching model (parameter).
 
 - Can we use something like gibbs sampling or the like (MCMC) together with such a dynamic factor (exogeneous var)? 
 
