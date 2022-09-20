@@ -1,10 +1,16 @@
 # Import Dataset
 library("quantmod")
+library(ggplot2)
+library(dplyr)
+library(latex2exp)
 
-start <- as.Date("1950-01-01")
+data_dir = "C:\\Users\\Adria\\Documents\\Github Projects\\data\\markov-switching"
+
+start <- as.Date("1988-01-05")
 end <- as.Date("2022-08-21")
 df <- quantmod::getSymbols("^SP500TR", src = "yahoo", from = start, to = end, auto.assign = FALSE)
 price = df[, "SP500TR.Close"]
+colnames(price) <- "Price"
 lret = diff(log(price))[-1,]
 plot(lret)
 
@@ -18,6 +24,14 @@ test_y = lret[(1+split_idx):length(lret)]
 
 real_vol = abs(lret)
 
+
+# Imports realized volatility 
+omi <- read.csv(paste(data_dir, "\\oxfordmanrealizedvolatilityindices.csv", sep=""))
+omi <- omi[omi$Symbol==".SPX", ]
+omi$Date <- as.Date(omi$X)
+plot(omi$rk_parzen*sqrt(250))
+
+omi_vol <- xts(select(omi, "rk_parzen"), order.by=as.Date(omi[, 21]))
 
 #HMM
 library("MSGARCH")
@@ -36,14 +50,30 @@ summary(ms2.garch.n)
 fit.ml <- FitML(spec = ms2.garch.n, data = train_y)
 summary(fit.ml)
 
+# Unconditional volatility levels
+sqrt(250) * sapply(ExtractStateFit(fit.ml), UncVol)
+
+# Predicted in-sample Probabilities
+fit.ml.state <- State(fit.ml)
+pred_probs <- fit.ml.state$PredProb[, 1, 1]
+pred_probs <- data.frame(Dates = as.Date(names(pred_probs)), value=pred_probs) # Convert to data.frame for ggplot2
+ggplot() + 
+  geom_line(data=pred_probs, aes(x=Dates, y=value, group=1)) + 
+  scale_x_date(date_breaks = "years" , date_labels = "%y") + 
+  xlab("Dates (Year)") + 
+  ylab("Prob") + 
+  ggtitle("Predicted in-sample Probability of state 1") + 
+  theme(plot.title = element_text(hjust = 0.5))
 
 
 # ---------------------- Creating Point Forecasts ------------------------------
 # ------------------------------------------------------------------------------
+start.time <- Sys.time()
+
 horizons = c(1,5)
 fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
                order.by = index(test_y))
-names(fcst) = sapply(horizons, function(x) paste("h_d", toString(x)))
+names(fcst) = sapply(horizons, function(x) paste("h_d", toString(x), sep=""))
 
 
 for (dd in 1:length(test_y)) {
@@ -52,10 +82,21 @@ for (dd in 1:length(test_y)) {
 }  
 msgarch_fcst <- fcst
 
-plot(msgarch_fcst[, 2])
-lines(msgarch_fcst[, 1])
-lines(real_vol[index(msgarch_fcst)], col="red")
+#TODO: Shift 5day horizon by 5... assign dates correctly the the predictions
 
+ggplot() + geom_line(data=msgarch_fcst, aes(x=Index, y=h_d1, colour="1")) + 
+  geom_line(data=msgarch_fcst, aes(x=Index, y=h_d5, colour="5")) +
+  scale_color_manual(name = "horizon", values = c("1" = "darkblue", "5" = "red"))
+
+ggplot() + 
+  geom_line(data=real_vol[index(msgarch_fcst)], aes(x=Index, y=Price, colour="a")) +
+  geom_line(data=omi_vol[index(msgarch_fcst)]*1000, aes(x=Index, y=rk_parzen, colour="b"))
+
+plot(omi_vol)
+
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 
 # --------------- Point Forecast evaluation etc. -------------------------------
 # ------------------------------------------------------------------------------
