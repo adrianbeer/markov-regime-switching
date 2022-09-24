@@ -12,6 +12,41 @@ library(xtable)
 library(fGarch)
 
 
+
+# Helpful Functions -------------------------------------------------------
+f_mse <- function(y_hat, y) {
+  return (mean((y_hat - y)^2))
+}
+f_mae <- function(y_hat, y) {
+  return (mean(abs(y_hat - y)))
+}
+f_bias <- function(y_hat, y) {
+  return (mean(y_hat - y))
+}
+f_rmse <- function(y_hat, y) {
+  return (sqrt(f_mse(y_hat, y)))
+}
+get_err_table <- function(y_hat, y) {
+  if (is.null(dim(y_hat))) {
+    mse <- f_mse(y_hat, y)
+    mae <- f_mae(y_hat, y)
+    bias <- f_bias(y_hat, y)
+    rmse <- f_rmse(y_hat, y) 
+  } else {
+    mse <- sapply(y_hat, f_mse, y)
+    mae <- sapply(y_hat, f_mae, y)
+    bias <- sapply(y_hat, f_bias, y)
+    rmse <- sapply(y_hat, f_rmse, y)  
+  }
+  err_table <- cbind(mse, mae, rmse, bias)
+  return(err_table)
+}
+
+
+# Section 1 ---------------------------------------------------------------
+
+
+
 theme_update(plot.title = element_text(hjust = 0.5))
 msgarch_color = "green"
 garch_color = "red"
@@ -46,7 +81,9 @@ test_y = lret[(1+split_idx):length(lret)]
 
 real_vol = abs(lret)
 train_vol = real_vol[1:split_idx]
+train_var = train_vol^2
 test_vol = real_vol[(1+split_idx):length(lret)]
+test_var = test_vol^2
 
 
 bear_test_dates <- c(seq.Date(as.Date("2020-02-01"),as.Date("2020-04-01"),by="day"),
@@ -76,8 +113,12 @@ eighties <- seq.Date(as.Date("1986-01-01"),as.Date("1990-01-01"),by="day")
 # 
 # test_omi_vol <- omi_vol[index(test_vol)]
 
-# ---------------------- Training the models -----------------------------------
-# ------------------------------------------------------------------------------
+
+
+
+
+# Training the Models and Preliminary Analysis ----------------------------
+
 set.seed(420)
 
 # Training the models took approx. 1 min
@@ -168,8 +209,10 @@ ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
 #grid.arrange(p1, p2, nrow=2)
 
 
-# ---------------------- Creating Point Forecasts ------------------------------
-# ------------------------------------------------------------------------------
+
+# Generating Point Forecasts ----------------------------------------------
+
+
 
 # Calculating the Point forecasts took approx. 1 min.
 
@@ -272,48 +315,19 @@ end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
-saveRDS()
+save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml", # Models
+            "msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
+            "train_vol", "test_vol"), file="fitted_model.RData")
 
 
 
 
-# --------------- Point Forecast Evaluation -------------------------------
-# ------------------------------------------------------------------------------
 
-
-f_mse <- function(y_hat, y) {
-  return (mean((y_hat - y)^2))
-}
-f_mae <- function(y_hat, y) {
-  return (mean(abs(y_hat - y)))
-}
-f_bias <- function(y_hat, y) {
-  return (mean(y_hat - y))
-}
-f_rmse <- function(y_hat, y) {
-  return (sqrt(f_mse(y_hat, y)))
-}
-get_err_table <- function(y_hat, y) {
-  if (is.null(dim(y_hat))) {
-    mse <- f_mse(y_hat, y)
-    mae <- f_mae(y_hat, y)
-    bias <- f_bias(y_hat, y)
-    rmse <- f_rmse(y_hat, y) 
-  } else {
-    mse <- sapply(y_hat, f_mse, y)
-    mae <- sapply(y_hat, f_mae, y)
-    bias <- sapply(y_hat, f_bias, y)
-    rmse <- sapply(y_hat, f_rmse, y)  
-  }
-  err_table <- cbind(mse, mae, rmse, bias)
-  return(err_table)
-}
-
-
-# ---------------------------- Out of sample -------------------------------
-msgarch_err <- get_err_table(msgarch_fcst[,1], test_vol)
-garch_err <- get_err_table(garch_fcst[,1], test_vol)
-avg_err <- get_err_table(mean(train_vol), test_vol)
+# Point Forecast Evaluation
+# Point Forecast Evaluation - out-of-sample --------------------
+msgarch_err <- get_err_table(msgarch_fcst[,1]^2, test_vol)
+garch_err <- get_err_table(garch_fcst[,1]^2, test_vol)
+avg_err <- get_err_table(mean(train_var), test_vol)
 rownames(avg_err) = "Avg"
 
 sr1_err <- get_err_table(sr1_fcst, test_vol)
@@ -328,7 +342,7 @@ dm.test(msgarch_fcst[,1], garch_fcst[,1], h=1, power = 2)
 # - Murphy Diagram for one-day-ahead point forecasts
 murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
 
-# ---------------------------- In sample -------------------------------
+# Point Forecast Evaluation - in-sample -------------------------------
 bip <- 100 # burn_in_period
 msgarch_train_vola <- Volatility(msgarch.fit.ml)
 garch_train_vola <- Volatility(garch.fit.ml)
@@ -339,19 +353,19 @@ partial_avg <- (cumsum(train_vol)/seq_along(train_vol))$Price %>% as.zooreg
 forecasts <- list(msgarch_train_vola, garch_train_vola, mssr1_train_vola, mssr2_train_vola, partial_avg)
 err_tables <- list()
 for (ff in 1:length(forecasts)) {
-  err_tables[[ff]] <- get_err_table(forecasts[[ff]][bip:length(train_vol),], train_vol[bip:length(train_vol),] %>% as.zooreg)
+  err_tables[[ff]] <- get_err_table(forecasts[[ff]][bip:length(train_vol),]^2, train_vol[bip:length(train_vol),]^2 %>% as.zooreg)
 }
 do.call("rbind", err_tables)
 
 # average has bias, because we start with the 1929 depression...
 
-# ---------------------------- Eighties Case Study
+############# Eighties Case Study
 actual <- train_vol[index(train_vol) %in% eighties]
 
-ms_garch_eighties <- msgarch_train_vola[msgarch_train_vola$Index %in% eighties, 2]
-garch_eighties <- garch_train_vola[garch_train_vola$Index %in% eighties, 2]
-mssr1_eighties <- mssr1_train_vola[mssr1_train_vola$Index %in% eighties, 2]
-mssr2_eighties <- mssr2_train_vola[mssr2_train_vola$Index %in% eighties, 2]
+ms_garch_eighties <- msgarch_train_vola[index(msgarch_train_vola) %in% eighties, 2]
+garch_eighties <- garch_train_vola[index(garch_train_vola) %in% eighties, 2]
+mssr1_eighties <- mssr1_train_vola[index(mssr1_train_vola) %in% eighties, 2]
+mssr2_eighties <- mssr2_train_vola[index(mssr2_train_vola) %in% eighties, 2]
 start_of_eighties_idx <- match(as.Date(eighties[2]), as.Date(index(train_vol)))
 avg_eighties <- mean(train_vol[1:start_of_eighties_idx])
 
@@ -367,9 +381,9 @@ eighties_err_tabl
 
 rbind(msgarch_err, garch_err, sr1_err, sr2_err, avg_err)
 
-# --------------- Scenario Forecast evaluation etc. ----------------------------
-# --------------- Latent State evaluation --------------------------------------
-# ------------------------------------------------------------------------------
+
+# Scenario Analysis and Visualization -------------------------------------
+
 
 # # Probabilities for out-of-sample period
 # dummy_ms2.garch.n <- CreateSpec(variance.spec = list(model = c("gjrGARCH", "gjrGARCH")),
@@ -379,8 +393,7 @@ rbind(msgarch_err, garch_err, sr1_err, sr2_err, avg_err)
 # dummy_msgarch.fit.ml <- FitML(spec = dummy_ms2.garch.n, data = train_y)
 # summary(dummy_msgarch.fit.ml)
 
-# -------------------------  In-Sample  --------------------------------
-
+################## In-Sample
 # In-sample volatility
 
 msgarch_train_vola <- Volatility(msgarch.fit.ml) %>% fortify.zoo
@@ -397,7 +410,7 @@ p2
 
 
 
-# -------------------------  Out-Of-Sample  --------------------------------
+##################### Out-Of-Sample  
 
 # CORONA POINT FORECAST
 p1 <- ggplot() + 
