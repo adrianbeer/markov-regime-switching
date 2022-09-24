@@ -32,13 +32,19 @@
 % HINZUGEFÜGT VON ADRIAN
 % MAKE subsubsubsection possible
 \usepackage{titlesec}
+
 \usepackage{cleveref}
 \usepackage{acronym}
 
+\graphicspath{{./img/}}
+
+
+% ACRONYMS 
 \newacro{GARCH}{General Autoregressive Conditional Heteroskedasticity}
 \newacro{ARCH}{Autoregressive Conditional Heteroskedasticity}
 \newacro{ARMA}{AutoRegressive Moving Average}
 \newacro{SGED}{Skewed Generlized Error Distribution}
+\newacro{GED}{Generlized Error Distribution}
 
 \setcounter{secnumdepth}{4}
 
@@ -171,6 +177,8 @@ Given a HMM model we can deduce estimates of the hidden state via the Viterbi al
 Our goal is to maximize the incomplete data log-likelihood 
 $$\log f(y \mid X ; \theta)=\log \sum_{s_{1}=1}^{2} \sum_{s_{2}=1}^{2} \ldots \sum_{s_{T}=1}^{2} f(y, s \mid X ; \theta)$$ which is not feasible to compute (complexity).
 
+
+$$ \mathcal{L}\left(\Psi \mid \mathcal{I}_T\right) \equiv \prod_{t=1}^T f\left(y_t \mid \Psi, \mathcal{I}_{t-1}\right) $$ 
 \subsection{Markov-Switching Models}
 
 \subsubsection{Exogeneous Variables}
@@ -194,7 +202,7 @@ $$f_{\mathrm{GED}}(\eta ; \nu) \equiv \frac{\nu e^{-\frac{1}{2}|\eta / \lambda|^
 
 \subsubsection{GARCH}
 \label{sss:GARCH}
-The \ac{GARCH} model has been popular in order to forecast the volatility of indices. It was introduced XXXX by \cite{} and is an extension of the ARCH model, which was introduced Engle \cite{}. It models the error by using a \ac{ARMA} model.
+The \ac{GARCH} model has been popular in order to forecast the volatility of indices. It was introduced  by Bollerslev \cite{bollerslev_generalized_1986} and is an extension of the ARCH model, which was introduced Engle \cite{engle_autoregressive_1982}. It models the error by using a \ac{ARMA} model.
 It tries to explain the observation that the volatility of financial assets tends to be heteroskedastic and cluster, i.e. periods with high volatility are followed by periods with high volatility.
 
 The general Markov-switching GARCH specification we use follows \cite{ardia_markov-switching_2019}: 
@@ -207,7 +215,7 @@ $\mathcal{D}$ being some zero-mean distribution, the conditional variance$h_{k,t
 A GARCH(1,1) model has the form $h_{k, t} \equiv \alpha_{0, k}+\alpha_{1, k} y_{t-1}^{2}+\beta_{k} h_{k, t-1}$ models the conditional variance process. $h_{k,t}$ is the conditional variance. Similar to an \ac{ARMA} model which tries specify the conditional mean, the \ac{GARCH} model tries to specify the conditional variance. The lagged squared return term can be interpreted as a proxy for the realized variance in the last observation period. 
 In this model long periods of high variance can be modeled by increasing the intercept $\beta$.\\
 
-Many extensions of the GARCH model exist which try to account for the the observation that the variance caused by positive returns don't have the same effect as variance that is caused by negative returns. One example is the GJR model by \cite{}: $$ h_{k, t} \equiv \alpha_{0, k}+\left(\alpha_{1, k}+\alpha_{2, k} \mathbb{I}\left\{y_{t-1}<0\right\}\right) y_{t-1}^2+\beta_k h_{k, t-1}$$
+Many extensions of the GARCH model exist which try to account for the the observation that the variance caused by positive returns don't have the same effect as variance that is caused by negative returns. One example is the GJR model by \cite{glosten_relation_1993}: $$ h_{k, t} \equiv \alpha_{0, k}+\left(\alpha_{1, k}+\alpha_{2, k} \mathbb{I}\left\{y_{t-1}<0\right\}\right) y_{t-1}^2+\beta_k h_{k, t-1}$$
 
 However the GARCH model fails to explain many phenomena which are observed, like the fat-tailedness of drawdown periods and depths (cite Robert Frey).
 
@@ -224,10 +232,54 @@ For the GARCH as well as for the MSGARCH models we will use a \ac{SGED} to descr
 Also, GJR-GARCH is used for both of the models, see \cref{sss:GARCH}.
 
 
-
 \subsection{Data set}
+The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance.
+
+We split our dataset s.t. we use the first 80\% observations for training and the last 20\% for testing the models.
+
 
 \subsection{Results}
+
+% latex table generated in R 4.1.2 by xtable 1.8-4 package
+% Thu Sep 22 19:29:22 2022
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrr}
+  \hline
+ & MSSR1 & MSSR2 & GARCH \\ 
+  \hline
+$\alpha\_1$ & 0.17 & 0.00 & 0.01 \\ 
+  alpha1\_1 & 0.02 & 0.02 & 0.03 \\ 
+  alpha2\_1 & 0.21 & 0.08 & 0.08 \\ 
+  beta\_1 & 0.75 & 0.94 & 0.92 \\ 
+  nu\_1 & 1.05 & 1.53 & 6.19 \\ 
+  xi\_1 & 0.86 & 0.96 & 0.93 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+
+\subsubsection{Evaluation of Point Forecasts}
+
+\begin{figure}[h]
+\includegraphics[width=0.8\linewidth]{pforecast-russia-crash.pdf}
+\caption{One-day-ahead volatility forecasts during the Corona crash 2020.}
+\end{figure}
+
+\begin{figure}[h]
+\includegraphics[width=1.2\linewidth]{FiltVola\_InSample\_Eighties.pdf}
+\caption{One-day-ahead volatility forecasts during the Corona crash 2020. MSGARCH is model mostly in state 1.}
+\end{figure}
+
+\begin{figure}[h]
+\includegraphics[width=1.2\linewidth]{CoronaCrash\_MSGARCH\_Decomposition.pdf}
+\caption{One-day-ahead volatility forecasts during the Corona crash 2020. MSGARCH is model mostly in state 1.}
+\label{img:cor-decomp}
+\end{figure}
+
+In \cref{img:cor-decomp} one can see the two states of the MSGARCH (MSSR1 and MSSR2) model produce different forecasts and how they compare to the stand-alone GARCH model. 
+It can be observed that MSSR1 is less persistent, which is due to the smaller $\beta_1 = 0.7519$ compared to the larger $\beta_2 = 0.935$ of MSSR2.
+Furthermore we see that MSSR1 has a higher base-level volatility and tends to forecast volatility spikes which are larger than those of MSSR2. This once again, is caused by the larger $\alpha$ values which characterise MSSR1.
 
 \section{Conclusion}
 
