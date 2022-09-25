@@ -1,9 +1,9 @@
 # Import Dataset
-library("quantmod")
+library(quantmod)
 library(ggplot2)
 library(dplyr)
 library(latex2exp)
-library("MSGARCH")
+library(MSGARCH)
 library(patchwork)
 require(gridExtra)
 library(murphydiagram)
@@ -114,7 +114,15 @@ eighties <- seq.Date(as.Date("1986-01-01"),as.Date("1990-01-01"),by="day")
 
 
 
-# Training the Models and Preliminary Analysis ----------------------------
+# Training the Models ----------------------------------------------------------
+
+# Option: Execute this and skip rest of section
+load("fitted_models.RData")
+msgarch.fit.ml$spec = CreateSpec()
+sr.fit[[1]]$spec = CreateSpec()
+sr.fit[[2]]$spec = CreateSpec()
+garch.fit.ml$spec = CreateSpec()
+#---
 
 set.seed(420)
 
@@ -135,6 +143,11 @@ summary(ms2.garch.n)
 msgarch.fit.ml <- FitML(spec = ms2.garch.n, data = train_y)
 summary(msgarch.fit.ml)
 sr.fit <- ExtractStateFit(msgarch.fit.ml)
+
+save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml"), file="fitted_models.RData")
+
+
+# Preliminary Analysis ---------------------------------------------------------
 
 # Make LaTeX table of parameters
 params <- cbind(sr.fit[[1]]$par, sr.fit[[2]]$par, garch.fit.ml$par)
@@ -209,12 +222,11 @@ ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
 
 # Generating Point Forecasts ----------------------------------------------
 
-# 3 Minutes for all Points forecasts...
+# Option: Load old forecasts and skip this section
+#load("point_forecasts.RData")
+
 
 horizons = 1:10 # currently only works for horizon=1!!
-
-
-
 testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
 
 
@@ -242,8 +254,6 @@ testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
 # }
 
 # ---------------------- Single regime
-
-
 fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
@@ -252,15 +262,10 @@ fcst[1, 1] <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
 
 start.time <- Sys.time()
 
-fcst_comb <- foreach(dd=1:(length(test_y)-1), .combine=rbind, .packages=c('MSGARCH', "zoo", "xts")) %dopar% {
+for (dd in 1:(length(test_y)-1)) {
   pred <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE, newdata=test_y[1:dd])
   fcst[dd+1, 1] = pred$vol[1] # Note that the dates in pred$vol aren't correct - they include weekend
 } 
-
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
-
 for (dd in testing_anchor_points) {
   pred <- predict(garch.fit.ml, nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
   for (hh in 2:length(horizons)) {
@@ -269,10 +274,7 @@ for (dd in testing_anchor_points) {
   fcst
 }
 
-
-
 garch_fcst <- fcst
-
 
 
 # --------------------- MSGARCH SINGLE-REGIMES
@@ -321,16 +323,15 @@ for (dd in testing_anchor_points) {
 }
 msgarch_fcst <- fcst
 
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 
-
-
-save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml", # Models
-            "msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
-            "train_vol", "test_vol"), file="fitted_model.RData")
-
+save(list=c("msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
+           "train_vol", "test_vol"), file="point_forecasts.RData")
 
 # Point Forecast Evaluation
-# Point Forecast Evaluation - Out-of-Sample --------------------
+# Point Forecast Evaluation - Out-of-Sample - single-step --------
 msgarch_err <- get_err_table(msgarch_fcst[,1]^2, test_var)
 garch_err <- get_err_table(garch_fcst[,1]^2, test_var)
 sr1_err <- get_err_table(sr1_fcst^2, test_var)
@@ -353,6 +354,8 @@ dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 # - Murphy Diagram for one-day-ahead point forecasts
 murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
 
+# Point Forecast Evaluation - Out-of-Sample - multi-step --------
+print("TODO")
 # Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
 msgarch_train_vola <- Volatility(msgarch.fit.ml)
