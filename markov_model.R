@@ -12,8 +12,8 @@ library(xtable)
 library(fGarch)
 
 
-
 # Helpful Functions -------------------------------------------------------
+
 f_mse <- function(y_hat, y) {
   return (mean((y_hat - y)^2))
 }
@@ -44,9 +44,6 @@ get_err_table <- function(y_hat, y) {
 
 
 # Section 1 ---------------------------------------------------------------
-
-
-
 theme_update(plot.title = element_text(hjust = 0.5))
 msgarch_color = "green"
 garch_color = "red"
@@ -143,7 +140,7 @@ sr.fit <- ExtractStateFit(msgarch.fit.ml)
 params <- cbind(sr.fit[[1]]$par, sr.fit[[2]]$par, garch.fit.ml$par)
 params <- as.data.frame(params)
 colnames(params) <- c("MSSR1", "MSSR2", "GARCH")
-xtable(params)
+xtable(params, label="tab:model-params", caption="Fitted parameters of the MSGARCH and the GARCH model.")
 
 # Visualize densities
 f <- function(x) { return(dsged(x, 0, 1, nu=params[5, 1], xi=params[4, 1])) }
@@ -212,15 +209,13 @@ ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
 
 # Generating Point Forecasts ----------------------------------------------
 
-
-
-# Calculating the Point forecasts took approx. 1 min.
+# 3 Minutes for all Points forecasts...
 
 horizons = 1:10 # currently only works for horizon=1!!
 
-start.time <- Sys.time()
 
-testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), max(horizons))
+
+testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
 
 
 # -------------------- MSGARCH and GARCH
@@ -247,22 +242,38 @@ testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), max(horizons))
 # }
 
 # ---------------------- Single regime
+
+
 fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
 
 fcst[1, 1] <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
-for (dd in 1:(length(test_y)-1)) {
+
+start.time <- Sys.time()
+
+fcst_comb <- foreach(dd=1:(length(test_y)-1), .combine=rbind, .packages=c('MSGARCH', "zoo", "xts")) %dopar% {
   pred <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE, newdata=test_y[1:dd])
   fcst[dd+1, 1] = pred$vol[1] # Note that the dates in pred$vol aren't correct - they include weekend
 } 
+
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
 for (dd in testing_anchor_points) {
   pred <- predict(garch.fit.ml, nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
   for (hh in 2:length(horizons)) {
     fcst[dd+hh, hh] = pred$vol[horizons[hh]]
   }
-}  
+  fcst
+}
+
+
+
 garch_fcst <- fcst
+
+
 
 # --------------------- MSGARCH SINGLE-REGIMES
 # SR FIT 1
@@ -307,79 +318,80 @@ for (dd in testing_anchor_points) {
   for (hh in 2:length(horizons)) {
     fcst[dd+hh, hh] = pred$vol[horizons[hh]]
   }
-}  
+}
 msgarch_fcst <- fcst
 
 
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+
 
 save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml", # Models
             "msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
             "train_vol", "test_vol"), file="fitted_model.RData")
 
 
-
-
-
 # Point Forecast Evaluation
-# Point Forecast Evaluation - out-of-sample --------------------
-msgarch_err <- get_err_table(msgarch_fcst[,1]^2, test_vol)
-garch_err <- get_err_table(garch_fcst[,1]^2, test_vol)
-avg_err <- get_err_table(mean(train_var), test_vol)
+# Point Forecast Evaluation - Out-of-Sample --------------------
+msgarch_err <- get_err_table(msgarch_fcst[,1]^2, test_var)
+garch_err <- get_err_table(garch_fcst[,1]^2, test_var)
+sr1_err <- get_err_table(sr1_fcst^2, test_var)
+sr2_err <- get_err_table(sr1_fcst^2, test_var)
+avg_err <- get_err_table(mean(train_var), test_var)
 rownames(avg_err) = "Avg"
+oos_eval_1h <- rbind(msgarch_err, garch_err, sr1_err, sr2_err, avg_err)
 
-sr1_err <- get_err_table(sr1_fcst, test_vol)
-sr2_err <- get_err_table(sr1_fcst, test_vol)
+oos_eval_1h <- as.data.frame(oos_eval_1h)
+oos_eval_1h
+rownames(oos_eval_1h) <- c("MSGARCH_h1", "GARCH_h1", "MSSR1_h1", "MSSR_h1", "Avg")
+xtable(oos_eval_1h, digits=4, label="lab:oos_eval_1h", 
+       caption="Out-of-sample error measurements for forecasting horizon h=1")
 
-rbind(msgarch_err, garch_err, sr1_err, sr2_err, avg_err)
 
 # - Diebold-Mariano Test
-dm.test(msgarch_fcst[,1], garch_fcst[,1], h=1, power = 1)
-dm.test(msgarch_fcst[,1], garch_fcst[,1], h=1, power = 2)
+dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 1)
+dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 
 # - Murphy Diagram for one-day-ahead point forecasts
 murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
 
-# Point Forecast Evaluation - in-sample -------------------------------
+# Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
 msgarch_train_vola <- Volatility(msgarch.fit.ml)
 garch_train_vola <- Volatility(garch.fit.ml)
 mssr1_train_vola <- Volatility(sr.fit[[1]])
 mssr2_train_vola <- Volatility(sr.fit[[2]])
-partial_avg <- (cumsum(train_vol)/seq_along(train_vol))$Price %>% as.zooreg
+partial_avg <- sqrt(cumsum(train_var)/seq_along(train_var))$Price %>% as.zooreg
 
 forecasts <- list(msgarch_train_vola, garch_train_vola, mssr1_train_vola, mssr2_train_vola, partial_avg)
 err_tables <- list()
 for (ff in 1:length(forecasts)) {
   err_tables[[ff]] <- get_err_table(forecasts[[ff]][bip:length(train_vol),]^2, train_vol[bip:length(train_vol),]^2 %>% as.zooreg)
 }
-do.call("rbind", err_tables)
+is_eval_1h <- do.call("rbind", err_tables)
+is_eval_1h <- as.data.frame(is_eval_1h)
+rownames(is_eval_1h) <- c("MSGARCH_h1", "GARCH_h1", "MSSR1_h1", "MSSR_h1", "Avg")
+is_eval_1h
+xtable(is_eval_1h, digits=4)
+# Note: average has bias, because we start with the 1929 depression...
 
-# average has bias, because we start with the 1929 depression...
-
-############# Eighties Case Study
-actual <- train_vol[index(train_vol) %in% eighties]
+# Point Forecast Evaluation - Eighties Case Study ------------------------------
+actual <- train_var[index(train_vol) %in% eighties] %>% as.zooreg
 
 ms_garch_eighties <- msgarch_train_vola[index(msgarch_train_vola) %in% eighties, 2]
 garch_eighties <- garch_train_vola[index(garch_train_vola) %in% eighties, 2]
 mssr1_eighties <- mssr1_train_vola[index(mssr1_train_vola) %in% eighties, 2]
 mssr2_eighties <- mssr2_train_vola[index(mssr2_train_vola) %in% eighties, 2]
 start_of_eighties_idx <- match(as.Date(eighties[2]), as.Date(index(train_vol)))
-avg_eighties <- mean(train_vol[1:start_of_eighties_idx])
+avg_eighties <- mean(train_var[1:start_of_eighties_idx]) %>% sqrt
 
 forecasts <- list(ms_garch_eighties, garch_eighties, mssr1_eighties, mssr2_eighties, avg_eighties)
 err_tables <- list()
 for (ff in 1:length(forecasts)) {
-  err_tables[[ff]] <- get_err_table(forecasts[[ff]], actual)
+  err_tables[[ff]] <- get_err_table(forecasts[[ff]]^2, actual)
 }
 
 eighties_err_tabl <- do.call("rbind", err_tables)
 rownames(eighties_err_tabl) <- c("MSGARCH", "GARCH", "MSSR1", "MSSR2", "Avg")
 eighties_err_tabl
-
-rbind(msgarch_err, garch_err, sr1_err, sr2_err, avg_err)
 
 
 # Scenario Analysis and Visualization -------------------------------------
@@ -461,6 +473,11 @@ p1 <- ggplot() +
   ylab("Prob") + 
   ggtitle("Volatility 1-day-ahead forecasts during the 2008 Crash")
 p1
+
+
+
+
+
 
 
 

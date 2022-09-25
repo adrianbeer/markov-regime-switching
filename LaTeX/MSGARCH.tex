@@ -45,6 +45,10 @@
 \newacro{ARMA}{AutoRegressive Moving Average}
 \newacro{SGED}{Skewed Generlized Error Distribution}
 \newacro{GED}{Generlized Error Distribution}
+\newacro{MSE}{mean-square error}
+\newacro{MAE}{mean-absolute error}
+\newacro{RMSE}{root-mean-square error}
+
 
 \setcounter{secnumdepth}{4}
 
@@ -223,14 +227,15 @@ However the GARCH model fails to explain many phenomena which are observed, like
 We try to predict S\&P index using 
 
 \subsection{Experiment description}
-We compare the performance of 3 models: 
-1. A naive forecast, i.e. we estimate a model/ density which assumes i.i.d. observations. 
-2. A markov-switching model without indicators
-3. A markov-switching model with indicators
+We compare the performance of 2 models a stand-alone GARCH model and a MSGARCH model
 
 For the GARCH as well as for the MSGARCH models we will use a \ac{SGED} to describe the distribution of the log-returns.
 Also, GJR-GARCH is used for both of the models, see \cref{sss:GARCH}.
 
+\subsubsection{Performance Measures}
+When measuring the performance one has to be careful not to compare the square root variance forecasts $\sqrt{h_t}$ with the absolute returns $\sqrt{y_t^2} = | y_t |$ as these would be biased due to Jensen's inequality: Our model tries to achieve $\mathbb{V}(y) =\mathbb{E}(y^2) = h$ and $\mathbb{E}(| y |) \neq \sqrt{h}$. Instead the variance $h_t$ should be compared to the squared returns $y_t^2$.
+
+The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE}
 
 \subsection{Data set}
 The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance.
@@ -239,10 +244,13 @@ We split our dataset s.t. we use the first 80\% observations for training and th
 
 
 \subsection{Results}
+\subsubsection{Analysis of Model Parameters}
+In \cref{tab:model-params} the model parameters are displayed, which were fitted using a maximum likelihood estimator and the training set.
 
 % latex table generated in R 4.1.2 by xtable 1.8-4 package
 % Thu Sep 22 19:29:22 2022
 \begin{table}[ht]
+\label{tab:model-params}
 \centering
 \begin{tabular}{rrrr}
   \hline
@@ -259,7 +267,25 @@ $\alpha\_1$ & 0.17 & 0.00 & 0.01 \\
 \end{table}
 
 
+
+
 \subsubsection{Evaluation of Point Forecasts}
+
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrr}
+  \hline
+ & mse & mae & rmse & bias \\ 
+  \hline
+MSGARCH\_h1 & 24.2096 & 1.5169 & 4.9203 & 0.0195 \\ 
+  GARCH\_h1 & 24.9891 & 1.5415 & 4.9989 & 0.0441 \\ 
+  MSSR1\_h1 & 25.2808 & 1.5446 & 5.0280 & 0.0380 \\ 
+  MSSR\_h1 & 25.2808 & 1.5446 & 5.0280 & 0.0380 \\ 
+  Avg & 33.6508 & 1.8815 & 5.8009 & -0.0301 \\ 
+   \hline
+\end{tabular}
+\end{table}
 
 \begin{figure}[h]
 \includegraphics[width=0.8\linewidth]{pforecast-russia-crash.pdf}
