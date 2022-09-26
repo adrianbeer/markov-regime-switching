@@ -11,6 +11,7 @@ library(forecast)
 library(xtable)
 library(fGarch)
 
+# Set working directory to this file's directory.
 
 # Helpful Functions -------------------------------------------------------
 
@@ -27,6 +28,14 @@ f_rmse <- function(y_hat, y) {
   return (sqrt(f_mse(y_hat, y)))
 }
 get_err_table <- function(y_hat, y) {
+  # This assumes the last column has the least entries, i.e. largest forecasting horizon
+  y_hat <- y_hat[y_hat[, ncol(y_hat)] > 0, ] 
+  new_idx <- intersect(index(y_hat), index(y))
+  y_hat <- y_hat[index(y_hat) %in% new_idx,]
+  y <- y[index(y) %in% new_idx]
+  
+  stopifnot(nrow(y_hat) == length(y))
+  
   if (is.null(dim(y_hat))) {
     mse <- f_mse(y_hat, y)
     mae <- f_mae(y_hat, y)
@@ -222,12 +231,15 @@ ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
 
 # Generating Point Forecasts ----------------------------------------------
 
-# Option: Load old forecasts and skip this section
-#load("point_forecasts.RData")
-
-
 horizons = 1:10 # currently only works for horizon=1!!
 testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
+
+
+# Option: Load old forecasts and skip this section
+load("point_forecasts.RData")
+
+
+
 
 
 # -------------------- MSGARCH and GARCH
@@ -355,7 +367,24 @@ dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
 
 # Point Forecast Evaluation - Out-of-Sample - multi-step --------
-print("TODO")
+avg_fcst <- test_var
+avg_fcst[index(avg_fcst)] = mean(train_var)
+
+msgarch_mserr <- get_err_table(msgarch_fcst^2, test_var)
+garch_mserr <- get_err_table(garch_fcst^2, test_var)
+avg_err <- get_err_table(avg_fcst, test_var)
+rownames(avg_err) = "Avg"
+oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
+
+ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("MSE for different Forecasting Horizons")
+
 # Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
 msgarch_train_vola <- Volatility(msgarch.fit.ml)
