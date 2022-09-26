@@ -15,6 +15,7 @@ library(fGarch)
 
 # Helpful Functions -------------------------------------------------------
 
+
 f_mse <- function(y_hat, y) {
   return (mean((y_hat - y)^2))
 }
@@ -27,14 +28,16 @@ f_bias <- function(y_hat, y) {
 f_rmse <- function(y_hat, y) {
   return (sqrt(f_mse(y_hat, y)))
 }
-get_err_table <- function(y_hat, y, agg_funcs=list) {
+get_err_table <- function(y_hat, y, agg_funcs=list("MSE"=f_mse, "MAE"=f_mae, "RMSE"=f_rmse, "BIAS"=f_bias)) {
   # This assumes the last column has the least entries, i.e. largest forecasting horizon
-  y_hat <- y_hat[y_hat[, ncol(y_hat)] > 0, ] 
+  y_hat <- y_hat[(is.na(y_hat) %>% rowSums)==0, ] 
   new_idx <- intersect(index(y_hat), index(y))
   y_hat <- y_hat[index(y_hat) %in% new_idx,]
   y <- y[index(y) %in% new_idx]
   
   stopifnot(nrow(y_hat) == length(y))
+  stopifnot(is.na(y_hat) == 0)
+  stopifnot(min(y_hat) > 0)
   
   if (is.null(dim(y_hat))) {
     mse <- f_mse(y_hat, y)
@@ -42,10 +45,8 @@ get_err_table <- function(y_hat, y, agg_funcs=list) {
     bias <- f_bias(y_hat, y)
     rmse <- f_rmse(y_hat, y) 
   } else {
-    mse <- sapply(y_hat, f_mse, y)
-    mae <- sapply(y_hat, f_mae, y)
-    bias <- sapply(y_hat, f_bias, y)
-    rmse <- sapply(y_hat, f_rmse, y)  
+    func <- function(f){return(sapply(y_hat, f, y))}
+    return(sapply(agg_funcs, func))
   }
   err_table <- cbind(mse, mae, rmse, bias)
   return(err_table)
@@ -162,7 +163,7 @@ save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml"), file="fitted_models.RDa
 params <- cbind(sr.fit[[1]]$par, sr.fit[[2]]$par, garch.fit.ml$par)
 params <- as.data.frame(params)
 colnames(params) <- c("MSSR1", "MSSR2", "GARCH")
-xtable(params, label="tab:model-params", caption="Fitted parameters of the MSGARCH and the GARCH model.")
+xtable(params, digits=4, label="tab:model-params", caption="Fitted parameters of the MSGARCH and the GARCH model.")
 
 # Visualize densities
 f <- function(x) { return(dsged(x, 0, 1, nu=params[5, 1], xi=params[4, 1])) }
@@ -207,7 +208,7 @@ p1 <- ggplot() +
   ggtitle("Predicted in-sample Probability of state 1")
 
 p1
-#ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
+ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
 
 
 # -------------------- In-sample volatility estimate comparison (state1)
@@ -237,37 +238,11 @@ testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
 
 
 # Option: Load old forecasts and skip this section
-load("point_forecasts.RData")
+#load("point_forecasts.RData")
 
 
-
-
-
-# -------------------- MSGARCH and GARCH
-# models <- list(msgarch.fit.ml, garch.fit.ml)
-# fcst <- xts(x = cbind(replicate(length(horizons)*length(models), rep(-9999, length(test_y)))), 
-#                order.by = index(test_y))
-# 
-# names(fcst) = c(sapply(horizons, function(x) paste("MSGARCH_h", toString(x), sep="")),
-#                 sapply(horizons, function(x) paste("GARCH_h", toString(x), sep="")))
-# 
-
-# for (mm in 1:length(models)) {
-#   fcst[1, 1] <- predict(models[[mm]], nahead = 1, do.return.draw = FALSE)$vol[1]
-#   for (dd in 1:(length(test_y)-1)) {
-#     pred <- predict(models[[mm]], nahead = 1, do.return.draw = FALSE, newdata=test_y[1:dd])
-#     fcst[dd+1, (mm-1)*(length(horizons))+1] = pred$vol[1] # Note that the dates in pred$vol aren't correct - they include weekend
-#   } 
-#   for (dd in testing_anchor_points) {
-#     pred <- predict(models[[mm]], nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
-#     for (hh in 2:length(horizons)) {
-#       fcst[dd+hh, (mm-1)*(length(horizons))+hh] = pred$vol[horizons[hh]]
-#     }
-#   }  
-# }
-
-# ---------------------- Single regime
-fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
+# Generating Point Forecasts - Single regime (GARCH) ---------------------------
+fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),# TODO: NA instead of -1, hope this doesnt introduce bug
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
 
@@ -290,7 +265,7 @@ for (dd in testing_anchor_points) {
 garch_fcst <- fcst
 
 
-# --------------------- MSGARCH SINGLE-REGIMES
+# Generating Point Forecasts - MSGARCH SINGLE-REGIMES (MSSR1 & MSSR2) -----------
 # SR FIT 1
 model <- sr.fit[[1]]
 fcst <- xts(x = cbind(rep(-1, length(test_y))), 
@@ -317,9 +292,9 @@ for (dd in 1:(length(test_y)-1)) {
 } 
 sr2_fcst <- fcst
 
-# ----------------------- MULTI-REGIME
+# Generating Point Forecasts - MSGARCH (MULTI-REGIME) ---------------------------
 
-fcst <- xts(x = cbind(replicate(length(horizons), rep(-1, length(test_y)))), 
+fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))), 
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("MSGARCH_h", toString(x), sep=""))
 
@@ -375,13 +350,16 @@ g_max_error_impact <- max(abs(garch_fcst[, 1]^2 - test_var)/length(test_var))
 # Point Forecast Evaluation - Out-of-Sample - Multi-step --------
 avg_fcst <- test_var
 avg_fcst[index(avg_fcst)] = mean(train_var)
+colnames(avg_fcst) = ""  
 
 msgarch_mserr <- get_err_table(msgarch_fcst^2, test_var)
+#xtable(msgarch_err_table)
 garch_mserr <- get_err_table(garch_fcst^2, test_var)
-avg_err <- get_err_table(avg_fcst, test_var)
+avg_err <- get_err_table(avg_fcst, test_var) %>% t %>% as.data.frame
 rownames(avg_err) = "Avg"
 oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
 
+#MSE
 ggplot() + 
   geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
@@ -390,7 +368,21 @@ ggplot() +
   scale_x_continuous(breaks=seq(1,10,1)) +
   ylab("MSE") + 
   xlab("Forecasting Horizon") + 
-  ggtitle("MSE for different Forecasting Horizons")
+  ggtitle("OOS-MSE for different Forecasting Horizons")
+
+ggsave(paste(img_dir, "\\OOS-MSE-Multi-Step.pdf", sep=""))
+
+#MAE
+ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 2], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 2], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 2], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("OOS-MSE for different Forecasting Horizons")
+ggsave(paste(img_dir, "\\OOS-MAE-Multi-Step.pdf", sep=""))
 
 # Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
@@ -522,3 +514,8 @@ p1
 
 
 
+
+
+# Density Forecasts - Doesn't work
+pit <- PIT(msgarch.fit.ml, do.its=TRUE)
+hist(pit, breaks="Scott")
