@@ -27,7 +27,7 @@ f_bias <- function(y_hat, y) {
 f_rmse <- function(y_hat, y) {
   return (sqrt(f_mse(y_hat, y)))
 }
-get_err_table <- function(y_hat, y) {
+get_err_table <- function(y_hat, y, agg_funcs=list) {
   # This assumes the last column has the least entries, i.e. largest forecasting horizon
   y_hat <- y_hat[y_hat[, ncol(y_hat)] > 0, ] 
   new_idx <- intersect(index(y_hat), index(y))
@@ -53,7 +53,7 @@ get_err_table <- function(y_hat, y) {
 
 
 # Section 1 ---------------------------------------------------------------
-theme_update(plot.title = element_text(hjust = 0.5))
+theme_update(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
 msgarch_color = "green"
 garch_color = "red"
 mssr1_color = "brown"
@@ -183,8 +183,9 @@ ggsave(paste(img_dir, "\\FittedStandardizedDistr.pdf", sep=""))
 
 
 # Unconditional volatility levels
-sqrt(250) * sapply(ExtractStateFit(msgarch.fit.ml), UncVol)
-sqrt(250) * sapply(ExtractStateFit(garch.fit.ml), UncVol)
+sapply(ExtractStateFit(msgarch.fit.ml), UncVol)
+sapply(ExtractStateFit(garch.fit.ml), UncVol)
+sqrt(mean(train_var))
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
@@ -343,7 +344,7 @@ save(list=c("msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Foreca
            "train_vol", "test_vol"), file="point_forecasts.RData")
 
 # Point Forecast Evaluation
-# Point Forecast Evaluation - Out-of-Sample - single-step --------
+# Point Forecast Evaluation - Out-of-Sample - Single-step --------
 msgarch_err <- get_err_table(msgarch_fcst[,1]^2, test_var)
 garch_err <- get_err_table(garch_fcst[,1]^2, test_var)
 sr1_err <- get_err_table(sr1_fcst^2, test_var)
@@ -366,7 +367,12 @@ dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 # - Murphy Diagram for one-day-ahead point forecasts
 murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
 
-# Point Forecast Evaluation - Out-of-Sample - multi-step --------
+
+msg_max_error_impact <- max(abs(msgarch_fcst[, 1]^2 - test_var)/length(test_var))
+g_max_error_impact <- max(abs(garch_fcst[, 1]^2 - test_var)/length(test_var))
+
+
+# Point Forecast Evaluation - Out-of-Sample - Multi-step --------
 avg_fcst <- test_var
 avg_fcst[index(avg_fcst)] = mean(train_var)
 
@@ -379,7 +385,8 @@ oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
 ggplot() + 
   geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
-  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
   scale_x_continuous(breaks=seq(1,10,1)) +
   ylab("MSE") + 
   xlab("Forecasting Horizon") + 
