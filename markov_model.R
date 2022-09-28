@@ -17,7 +17,6 @@ library(scoringRules)
 
 # Set working directory to this file's directory.
 # install.packages("gridGraphics")
-# Add `return(recordPlot())` at the bottom of trace("murphydiagram_diff",edit=TRUE)
 
 # Helpful Functions -------------------------------------------------------
 my_map <- function(xs, fs) {
@@ -141,12 +140,12 @@ eighties <- seq.Date(as.Date("1986-01-01"),as.Date("1990-01-01"),by="day")
 
 # Training the Models ----------------------------------------------------------
 
-# Option: Execute this and skip rest of section
-load("fitted_models.RData")
-msgarch.fit.ml$spec = CreateSpec()
-sr.fit[[1]]$spec = CreateSpec()
-sr.fit[[2]]$spec = CreateSpec()
-garch.fit.ml$spec = CreateSpec()
+# Option: Execute this and skip rest of section (doesnt quite work atm ?)
+# load("fitted_models.RData")
+# msgarch.fit.ml$spec = CreateSpec()
+# sr.fit[[1]]$spec = CreateSpec()
+# sr.fit[[2]]$spec = CreateSpec()
+# garch.fit.ml$spec = CreateSpec()
 #---
 
 set.seed(420)
@@ -365,19 +364,19 @@ dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 end = (length(msgarch_fcst[, 1])-max(horizons)-1)
 start = max(horizons)+1
 
-p1 <- murphydiagram_diff(as.vector(msgarch_fcst[1:cutoff,1]^2), 
+murphydiagram_diff(as.vector(msgarch_fcst[1:cutoff,1]^2), 
               as.vector(garch_fcst[1:cutoff,1]^2), 
               as.vector(test_var$Price)[1:cutoff],)
 title("h=1")
 p1 <- recordPlot()
 
-p2 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,2]^2), 
+murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,2]^2), 
                    as.vector(garch_fcst[start:cutoff,2]^2), 
                    as.vector(test_var$Price)[start:cutoff],)
 title("h=2")
 p2 <- recordPlot()
 
-p3 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,3]^2), 
+murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,3]^2), 
                    as.vector(garch_fcst[start:cutoff,3]^2), 
                    as.vector(test_var$Price)[start:cutoff],)
 title("h=3")
@@ -385,7 +384,7 @@ p3 <- recordPlot()
 
 
 
-p4 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,4]^2), 
+murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,4]^2), 
                          as.vector(garch_fcst[start:cutoff,4]^2), 
                          as.vector(test_var$Price)[start:cutoff],)
 title("h=4")
@@ -416,7 +415,28 @@ avg_err <- get_err_table(avg_fcst, test_var) %>% t %>% as.data.frame
 rownames(avg_err) = "Avg"
 oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
 
-# bootstrap confindence intervals
+# Point Forecast Evaluation - Out-of-Sample - Multi-step - Bootstrap confindence intervals
+# no normality in the mean probably...
+boot = function(x,y){
+  N <- nrow(x)
+  boot_idx <-sample.int(N, N,replace=TRUE)
+  return(get_err_table(x[boot_idx,], y[boot_idx,]))
+}
+
+N_mc <- 10000
+boots_err_tables <- array(NA, dim=c(N_mc, length(horizons), 4))
+upper_ci95 <- array(NA, dim=c(length(horizons), 4))
+lower_ci05 <- array(NA, dim=c(length(horizons), 4))
+for (n in 1:N_mc) {
+  tmp <- boot(msgarch_fcst^2, test_var)
+  boots_err_tables[n, , ] <- tmp
+}
+for (i in 1:nrow(upper_ci95)) {
+  for (j in 1:ncol(upper_ci95)) {
+    upper_ci95[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.95)
+    lower_ci05[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.05)
+  }
+}
 
 
 #MSE
@@ -424,6 +444,8 @@ mse_plot <- ggplot() +
   geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
   geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
+  geom_line(aes(x=1:10, y=upper_ci95[, 1])) +
+  geom_line(aes(x=1:10, y=lower_ci05[, 1])) +
   scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
   scale_x_continuous(breaks=seq(1,10,1)) +
   ylab("MSE") + 
