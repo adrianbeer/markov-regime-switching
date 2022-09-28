@@ -12,11 +12,20 @@ library(xtable)
 library(fGarch)
 library(gridExtra)
 library(cowplot)
+library(scoringRules)
 
 # Set working directory to this file's directory.
 
 # Helpful Functions -------------------------------------------------------
-
+my_map <- function(xs, fs) {
+  #f hast to be a list
+  res <- rep(NA, length(fs))
+  for (ii in 1:length(fs)) {
+    res[ii] <- fs[[ii]](xs[ii])
+  }
+  return(res)
+}
+  
 
 f_mse <- function(y_hat, y) {
   return (mean((y_hat - y)^2))
@@ -139,8 +148,6 @@ garch.fit.ml$spec = CreateSpec()
 #---
 
 set.seed(420)
-
-# Training the models took approx. 1 min
 start.time <- Sys.time()
 
 # SINGLE-REGIME 
@@ -155,13 +162,14 @@ ms2.garch.n <- CreateSpec(variance.spec = list(model = c("gjrGARCH", "gjrGARCH")
                    distribution.spec = list(distribution = c("sged", "sged")))
 summary(ms2.garch.n)
 msgarch.fit.ml <- FitML(spec = ms2.garch.n, data = train_y)
+
 summary(msgarch.fit.ml)
-sr.fit <- ExtractStateFit(msgarch.fit.ml)
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
+sr.fit <- ExtractStateFit(msgarch.fit.ml)
 #save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml"), file="fitted_models.RData")
 
 
@@ -238,37 +246,39 @@ if (save_plots) ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""
 
 
 # Generating Point Forecasts ----------------------------------------------
-
-horizons = 1:10 # currently only works for horizon=1!!
+set.seed(420)
+horizons = 1:10
 testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
-
 
 # Option: Load old forecasts and skip this section
 #load("point_forecasts.RData")
 
 
 # Generating Point Forecasts - Single regime (GARCH) ---------------------------
-
-fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),# TODO: NA instead of -1, hope this doesnt introduce bug
+fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
 
-fcst[1, 1] <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
+CRPS <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),
+            order.by = index(test_y))
+names(CRPS) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
 
+fcst[1, 1] <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
 start.time <- Sys.time()
 
-for (dd in 1:(length(test_y)-1)) {
-  pred <- predict(garch.fit.ml, nahead = 1, do.return.draw = FALSE, newdata=test_y[1:dd])
-  fcst[dd+1, 1] = pred$vol[1] # Note that the dates in pred$vol aren't correct - they include weekend
-} 
+start.time <- Sys.time()
 for (dd in testing_anchor_points) {
-  pred <- predict(garch.fit.ml, nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
-  for (hh in 2:length(horizons)) {
+  pred <- predict(garch.fit.ml, nahead = max(horizons), do.return.draw = T, newdata=test_y[1:dd])
+  for (hh in 1:length(horizons)) {
     fcst[dd+hh, hh] = pred$vol[horizons[hh]]
+    CRPS[dd+hh, hh] <- crps_sample(coredata(test_y)[dd+hh, 1], coredata(pred$draw)[hh, ])
   }
-  fcst
 }
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 
+garch_CRPS <- CRPS
 garch_fcst <- fcst
 
 
@@ -305,18 +315,21 @@ fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("MSGARCH_h", toString(x), sep=""))
 
+CRPS <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),
+            order.by = index(test_y))
+names(CRPS) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
+
 fcst[1, 1] <- predict(msgarch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
-for (dd in 1:(length(test_y)-1)) {
-  pred <- predict(msgarch.fit.ml, nahead = 1, do.return.draw = FALSE, newdata=test_y[1:dd])
-  fcst[dd+1, 1] = pred$vol[1] # Note that the dates in pred$vol aren't correct - they include weekend
-} 
+
 for (dd in testing_anchor_points) {
-  pred <- predict(msgarch.fit.ml, nahead = max(horizons), do.return.draw = FALSE, newdata=test_y[1:dd])
-  for (hh in 2:length(horizons)) {
+  pred <- predict(msgarch.fit.ml, nahead = max(horizons), do.return.draw = T, newdata=test_y[1:dd])
+  for (hh in 1:length(horizons)) {
     fcst[dd+hh, hh] = pred$vol[horizons[hh]]
+    CRPS[dd+hh, hh] <- crps_sample(coredata(test_y)[dd+hh, 1], coredata(pred$draw)[hh, ])
   }
 }
 msgarch_fcst <- fcst
+msgarch_CRPS <- CRPS
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
