@@ -36,9 +36,12 @@
 \usepackage{cleveref}
 \usepackage{acronym}
 \usepackage[toc,page]{appendix}
-\usepackage{subfig}
+%\usepackage{subfig}
 \graphicspath{{./img/}}
 \usepackage{caption}
+\usepackage[yyyymmdd]{datetime}
+\usepackage{subcaption}
+%\usepackage[demo]{graphicx}
 
 
 % ACRONYMS 
@@ -46,11 +49,12 @@
 \newacro{ARCH}{Autoregressive Conditional Heteroskedasticity}
 \newacro{ARMA}{AutoRegressive Moving Average}
 \newacro{SGED}{Skewed Generlized Error Distribution}
-\newacro{GED}{Generlized Error Distribution}
+\newacro{GED}{Generalized Error Distribution}
 \newacro{MSE}{mean-square error}
 \newacro{MAE}{mean-absolute error}
 \newacro{RMSE}{root-mean-square error}
-
+\newacro{MSM}{Markov-Switching Model}
+\newacro{HMM}{Hidden Markov Model}
 
 \setcounter{secnumdepth}{4}
 
@@ -142,12 +146,9 @@ Kiel University \\
 \noindent Include a symbol directory if you use more than three uncommon abbreviations.
 	\begin{tabular}{l l}
 		\textbf{} & \\
-		$\pi$ & rate of inflation\\
-		$i$ & nominal interest rate \\
-		$r$ & real interest rate \\
-		$M$ & money stock \\
-
-
+		$\sigma$ & standard deviation\\
+		$\Psi$ & set of parameter values \\
+		$h$ conditional variance
 	\end{tabular}\\ \vspace{1cm}
 
 
@@ -173,6 +174,10 @@ Markov chain processes can be useful for identifying regimes in the past as well
 If the Markov model describes the data generating process well, it can also be used to simulate synthetic time series and potential future paths. %% why is this important
 
 \section{Background}
+\subsection{Markov-Switching Models}
+The general model consists of two stochastic processes $X$ and $Y$. The process $Y$ is observed, e.g. the stock price of a company, and it's conditional distribution depends on the unobserved Markov chain process $X$. According to \cite{an_identifiability_2013}, when the distribution of $y_t$ depends only on $x_t$ it is called a \ac{HMM}, and if it additionally depends  on the lagged values $y_{t-1}, ... y_{t-l}$ we call it a \ac{MSM}.
+
+
 
 There are two main ways to learn the parameters of a HMM model: Expectation-Maximization Algorithms (EM) such as Baum-Welch. And Markov Chain Monte Carlo methods (MCMC) such as the Metropolis-Hastings or Gibbs Sampling algorithm.
 
@@ -185,7 +190,6 @@ $$\log f(y \mid X ; \theta)=\log \sum_{s_{1}=1}^{2} \sum_{s_{2}=1}^{2} \ldots \s
 
 
 $$ \mathcal{L}\left(\Psi \mid \mathcal{I}_T\right) \equiv \prod_{t=1}^T f\left(y_t \mid \Psi, \mathcal{I}_{t-1}\right) $$ 
-\subsection{Markov-Switching Models}
 
 \subsubsection{Exogeneous Variables}
 \paragraph{Time-varying transition probabilities}
@@ -195,23 +199,30 @@ Most HMMs are trained based on an purely endogeneous variables. One way to intro
 Another way to integrate outside information is to use state space models. In this setting the state is represented by one or more so called dynamic factors whose behaviour is specified in the state equation and its relation to the variable of interest in the output equation. The usefulness of this approach depends on two factors: the dynamic factor has to be somewhat predictable and 
 needs to explain the output variable reasonably well. The state space model can be learned using the Kalman filters in Gaussian settings or using MCMC methods otherwise.
 
-\subsection{Financial Market Data}
+\subsection{Financial Markets}
 
 \subsubsection{Stylized Facts about returns and volatility}
 Volatility is standard deviation of the log returns.
 Fat-tailed. Power-law. Daily vs Monthly frequencies. 
 
-\subsubsection{Heavy-tailed Distributions}
-Many different distributions have been suggested for modeling asset returns, among them the log-normal, students-t and the \ac{GED} and stable tempered distributions.
-In this paper we will use the \ac{GED}, given the difficulty of implementing algorithms using more advanced distributions such as the stable tempered.
+\subsubsection{Distributions}
+Many different distributions have been suggested for modeling asset returns and volatility, among them the log-normal, students-t and the \ac{GED} and stable tempered distributions. 
+In this paper we will consider the (Log-)normal, the \ac{GED} and the Student-t distribution, given the difficulty of implementing algorithms using more advanced distributions such as the stable tempered distribution. The following three distributions are in standardized form, i.e. they are centered around 0 and have a standard deviation of 1.
+
+\paragraph{Normal Distribution}
+$$f_N(\eta) \equiv \frac{1}{\sqrt{2 \pi}} e^{-\frac{1}{2} \eta^2}$$
+
+\paragraph{Generalized Error Distribution}
 $$f_{\mathrm{GED}}(\eta ; \nu) \equiv \frac{\nu e^{-\frac{1}{2}|\eta / \lambda|^\nu}}{\lambda 2^{(1+1 / \nu)} \Gamma(1 / \nu)}, \quad \lambda \equiv\left(\frac{\Gamma(1 / \nu)}{4^{1 / \nu} \Gamma(3 / \nu)}\right)^{1 / 2}$$
+\paragraph{Student-t Distribution}
+$$f_S(\eta ; \nu) \equiv \frac{\Gamma\left(\frac{\nu+1}{2}\right)}{\sqrt{(\nu-2) \pi} \Gamma\left(\frac{\nu}{2}\right)}\left(1+\frac{\eta^2}{(\nu-2)}\right)^{-\frac{\nu+1}{2}}$$
 
 \subsubsection{GARCH}
 \label{sss:GARCH}
 The \ac{GARCH} model has been popular in order to forecast the volatility of indices. It was introduced  by Bollerslev \cite{bollerslev_generalized_1986} and is an extension of the ARCH model, which was introduced Engle \cite{engle_autoregressive_1982}. It models the error by using a \ac{ARMA} model.
 It tries to explain the observation that the volatility of financial assets tends to be heteroskedastic and cluster, i.e. periods with high volatility are followed by periods with high volatility.
 
-The general Markov-switching GARCH specification we use follows \cite{ardia_markov-switching_2019}: 
+The Markov-switching GARCH specification we use follows \cite{ardia_markov-switching_2019}: 
 Denote $y_t$ the log-returns in time period $t$, i.e. $log(p_t-p_{t-1})$ if $p_t$ is the asset price at time t.
 
 \begin{equation} \label{eq:msgarch-spec}
@@ -242,18 +253,25 @@ We compare the performance of 2 models, namely a single-state and a two-state ma
 For the single-state as well as for the markov-switching models we will use a \ac{SGED} to describe the distribution of the log-returns.
 For the GARCH model as well as for both states of the MSGARCH model, the GJR-GARCH specification is used, in order to make results easily interpretable and comparable.
 
+For training the model and producing the forecasts we use the R package 'MSGARCH' (version 2.50) by \cite{ardia_markov-switching_2019}.
+
 \subsubsection{Performance Measures}
 When measuring the performance one has to be careful not to compare the square root variance forecasts $\sqrt{h_t}$ with the absolute returns $\sqrt{y_t^2} = | y_t |$ as these would be biased due to Jensen's inequality: Our model tries to achieve $\mathbb{V}(y) =\mathbb{E}(y^2) = h$ and $\mathbb{E}(| y |) \neq \sqrt{h}$. Instead the variance $h_t$ should be compared to the squared returns $y_t^2$.
 
 The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE}.
 
-\subsection{Data set}
+\subsubsection{Data set}
+Our data set 
+
 The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance. Both for numerical reasons as well as for the ease of interpretation we will use the log-returns multiplied by 100 for training the model and for the evaluation.
 
 We split our dataset s.t. we use the first 80\% observations for training and the last 20\% for testing the models.
 
 
 \subsection{Results}
+\subsubsection{Model Selection}
+
+
 \subsubsection{Analysis of Model Behaviour and Parameters}
 In \cref{tab:model-params} the model parameters for the (MS-)GARCH model (see \cref{eq:GJR}) and shape parameters $\Psi = (\nu, \xi)$ of the conditional distribution (see ) are displayed, which were fitted using a maximum likelihood estimator on the training set. 
 The two separate states from the MSGARCH model are denoted MSSR1 and MSSR2.
@@ -288,12 +306,12 @@ XXXX is likely to play a role after large volatility spikes like the 1987 Black 
 		$t | k=2$ & 0.0059 & 0.9941 \\
 		\hline
 	\end{tabular}
-	\captionof{table}{Transitions probabilities of the MSGARCH states.}
+	\captionof{table}{Transition probabilities of the MSGARCH states.}
  	\label{tab:trans-probs}
 \end{minipage}
 \vspace{0.5cm}
 
-In \cref{tab:trans-probs} the transitions probabilities for the states in the MSGARCH model are displayed. The stable probabilities (i.e. the long-term probability of being in state 1 or 2) are XXXX for MSSR1 and XXXX for MSSR2.
+In \cref{tab:trans-probs} the transitions probabilities for the markov chain states in the MSGARCH model are displayed. The stable probabilities (i.e. the long-term probability of being in state 1 or 2) are XXXX for MSSR1 and XXXX for MSSR2.
 
 In \cref{img:single-state-forecasts} one can see the two states of the MSGARCH (MSSR1 and MSSR2) model produce different forecasts and how they compare to the stand-alone GARCH model. 
 It can be observed that MSSR1 is less persistent, which is due to the smaller $\beta_1 = 0.7519$ compared to the larger $\beta_2 = 0.935$ of MSSR2.
@@ -305,7 +323,10 @@ Furthermore we see that MSSR1 has a higher base-level volatility and tends to fo
 	\caption{One-day-ahead volatility forecasts during the Corona crash 2020. }
 \end{figure}
 
-\subsubsection{Evaluation of Point Forecasts}
+%TODO insample performance evaluation ?
+
+\subsubsection{Out-of-Sample Evaluation}
+We evaluated the performance of our model in an out-of-sample dataset ranging from \formatdate{02}{10}{2003} to \formatdate{19}{08}{2022}. For every date we produce point and density forecasts via simulation with a forecasting horizon ranging from 1 to 10 trading days.
 
 \begin{figure}[H]
 	\centering
@@ -314,10 +335,51 @@ Furthermore we see that MSSR1 has a higher base-level volatility and tends to fo
 	\caption{Out-of-sample error measurements for different forecasting horizons and the two models MSGARCH and GARCH.}
 \end{figure}
 
+
 In \cref{fig:oos-error-multi-step} we can see that MSGARCH has outperformed the GARCH model out-of-sample for every forecasting horizon from 1 to 10 days and for both measures MAE and MSE. 
 A similar plot was generated using the RMSE error measure, which isn't displayed here for brevity, but can be verified in \cref{app:point-forecasts}. 
 The percentage-wise improvement $\frac{e_{GARCH}-e_{MSGARCH}}{e_{GARCH}}$ (where e is the error measure) ranges from 2.14\% to 4\% for MSE and from 0.81\% to 3.2\% for MAE. It is not large, but consistent across error measures and forecasting horizons.
 Both errors increase linearly with respect to the forecasting horizon, tending towards the error obtained by the unconditional volatility estimate.
+
+% TODO: Diebold-Mariano test
+
+
+In \cref{fig:murphy-diagrams} the difference of the two forecasts in the murphy diagram are displayed. It can't be observed that any forecasting model dominates the other. This means that it depends on the error measure, whether the single-state GARCH or the MSGARCH forecasts produce smaller, more desireable quantities.
+For an explanation of murphy diagrams, see \cite{ehm_quantiles_2016} Sections 3 and 4.
+
+\begin{figure}[H]
+	\begin{subfigure}{.5\textwidth}
+		\centering
+		\includegraphics[width=.8\linewidth]{murph1.pdf}
+		\caption{1a}
+		\label{fig:sfig1}
+	\end{subfigure}%
+	\begin{subfigure}{.5\textwidth}
+		\centering
+		\includegraphics[width=.8\linewidth]{murph2.pdf}
+		\caption{1b}
+		\label{fig:sfig2}
+	\end{subfigure}
+	\begin{subfigure}{.5\textwidth}
+	\centering
+	\includegraphics[width=.8\linewidth]{murph3.pdf}
+	\caption{1b}
+	\label{fig:sfig2}
+\end{subfigure}
+	\begin{subfigure}{.5\textwidth}
+	\centering
+	\includegraphics[width=.8\linewidth]{murph4.pdf}
+	\caption{1b}
+	\label{fig:sfig2}
+\end{subfigure}
+	\caption{Plots showing the difference in the extremal scores of the MSGARCH and the GARCH forecasts for horizons 1-4.}
+	\label{fig:murphy-diagrams}
+\end{figure}
+
+
+
+% TODO CRPS analysis
+
 
 \begin{figure}[h]
 \includegraphics[width=1.2\linewidth]{pforecast-russia-crash.pdf}
@@ -363,6 +425,7 @@ In the bibliography, you list all the sources that you use and therefore cite in
 \bibliographystyle{Alpha}
 
 \begin{appendices}
+%TODO add tables here
 \chapter{Point Forecasts}
 \label{app:point-forecasts}
 

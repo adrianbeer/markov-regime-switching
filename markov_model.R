@@ -14,7 +14,10 @@ library(gridExtra)
 library(cowplot)
 library(scoringRules)
 
+
 # Set working directory to this file's directory.
+# install.packages("gridGraphics")
+# Add `return(recordPlot())` at the bottom of trace("murphydiagram_diff",edit=TRUE)
 
 # Helpful Functions -------------------------------------------------------
 my_map <- function(xs, fs) {
@@ -40,32 +43,31 @@ f_rmse <- function(y_hat, y) {
   return (sqrt(f_mse(y_hat, y)))
 }
 get_err_table <- function(y_hat, y, agg_funcs=list("MSE"=f_mse, "MAE"=f_mae, "RMSE"=f_rmse, "BIAS"=f_bias)) {
-  # This assumes the last column has the least entries, i.e. largest forecasting horizon
-  y_hat <- y_hat[(is.na(y_hat) %>% rowSums)==0, ] 
-  new_idx <- intersect(index(y_hat), index(y))
-  y_hat <- y_hat[index(y_hat) %in% new_idx,]
-  y <- y[index(y) %in% new_idx]
-  
-  stopifnot(nrow(y_hat) == length(y))
-  stopifnot(is.na(y_hat) == 0)
-  stopifnot(min(y_hat) > 0)
   
   if (is.null(dim(y_hat))) {
-    mse <- f_mse(y_hat, y)
-    mae <- f_mae(y_hat, y)
-    bias <- f_bias(y_hat, y)
-    rmse <- f_rmse(y_hat, y) 
+    # for in-sample evaluation...
+    func_1d <- function(f){return(f(y_hat, y))}
+    return(sapply(agg_funcs, func_1d))
+    
   } else {
+    # This assumes the last column has the least entries, i.e. largest forecasting horizon
+    y_hat <- y_hat[(is.na(y_hat) %>% rowSums)==0, ] 
+    new_idx <- intersect(index(y_hat), index(y))
+    y_hat <- y_hat[index(y_hat) %in% new_idx,]
+    y <- y[index(y) %in% new_idx]
+    
+    stopifnot(nrow(y_hat) == length(y))
+    stopifnot(is.na(y_hat) == 0)
+    stopifnot(min(y_hat) > 0)
+    
     func <- function(f){return(sapply(y_hat, f, y))}
     return(sapply(agg_funcs, func))
   }
-  err_table <- cbind(mse, mae, rmse, bias)
-  return(err_table)
 }
 
 
 # Section 1 ---------------------------------------------------------------
-save_plots = FALSE
+save_plots = T
 
 theme_update(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
 msgarch_color = "green"
@@ -359,10 +361,45 @@ xtable(oos_eval_1h, digits=4, label="lab:oos_eval_1h",
 dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 1)
 dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 
-# - Murphy Diagram for one-day-ahead point forecasts
-murphydiagram(as.vector(msgarch_fcst[,1]), as.vector(garch_fcst[,1]), as.vector(test_vol$Price), labels=c("MSGARCH", "GARCH"))
+# Murphy Diagrams -----------------------------------------------------------
+end = (length(msgarch_fcst[, 1])-max(horizons)-1)
+start = max(horizons)+1
+
+p1 <- murphydiagram_diff(as.vector(msgarch_fcst[1:cutoff,1]^2), 
+              as.vector(garch_fcst[1:cutoff,1]^2), 
+              as.vector(test_var$Price)[1:cutoff],)
+title("h=1")
+p1 <- recordPlot()
+
+p2 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,2]^2), 
+                   as.vector(garch_fcst[start:cutoff,2]^2), 
+                   as.vector(test_var$Price)[start:cutoff],)
+title("h=2")
+p2 <- recordPlot()
+
+p3 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,3]^2), 
+                   as.vector(garch_fcst[start:cutoff,3]^2), 
+                   as.vector(test_var$Price)[start:cutoff],)
+title("h=3")
+p3 <- recordPlot()
 
 
+
+p4 <- murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,4]^2), 
+                         as.vector(garch_fcst[start:cutoff,4]^2), 
+                         as.vector(test_var$Price)[start:cutoff],)
+title("h=4")
+p4 <- recordPlot()
+
+if (save_plots) {
+  mylist <- list(p1, p2, p3, p4)
+  for (p in seq_along(mylist)) {
+    pdf(paste(img_dir, "\\murph" , p %>% as.character, ".pdf", sep=""))
+    print(mylist[[p]])
+    dev.off()
+  }
+  
+}
 msg_max_error_impact <- max(abs(msgarch_fcst[, 1]^2 - test_var)/length(test_var))
 g_max_error_impact <- max(abs(garch_fcst[, 1]^2 - test_var)/length(test_var))
 
@@ -378,6 +415,9 @@ garch_mserr <- get_err_table(garch_fcst^2, test_var)
 avg_err <- get_err_table(avg_fcst, test_var) %>% t %>% as.data.frame
 rownames(avg_err) = "Avg"
 oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
+
+# bootstrap confindence intervals
+
 
 #MSE
 mse_plot <- ggplot() + 
@@ -413,7 +453,6 @@ if (save_plots) ggsave(paste(img_dir, "\\Forecast-Errors-OOS-Multi-Step.pdf", se
 ((oos_eval_multi_step[1:10, ] - oos_eval_multi_step[11:20, ])/oos_eval_multi_step[11:20, ]) %>% sapply(min)
 
 
-
 # Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
 msgarch_train_vola <- Volatility(msgarch.fit.ml)
@@ -433,6 +472,8 @@ rownames(is_eval_1h) <- c("MSGARCH_h1", "GARCH_h1", "MSSR1_h1", "MSSR_h1", "Avg"
 is_eval_1h
 xtable(is_eval_1h, digits=4)
 # Note: average has bias, because we start with the 1929 depression...
+
+#TODO: Make graph
 
 # Point Forecast Evaluation - Eighties Case Study ------------------------------
 actual <- train_var[index(train_vol) %in% eighties] %>% as.zooreg
