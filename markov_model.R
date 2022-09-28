@@ -10,6 +10,8 @@ library(murphydiagram)
 library(forecast)
 library(xtable)
 library(fGarch)
+library(gridExtra)
+library(cowplot)
 
 # Set working directory to this file's directory.
 
@@ -54,6 +56,8 @@ get_err_table <- function(y_hat, y, agg_funcs=list("MSE"=f_mse, "MAE"=f_mae, "RM
 
 
 # Section 1 ---------------------------------------------------------------
+save_plots = FALSE
+
 theme_update(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
 msgarch_color = "green"
 garch_color = "red"
@@ -154,7 +158,11 @@ msgarch.fit.ml <- FitML(spec = ms2.garch.n, data = train_y)
 summary(msgarch.fit.ml)
 sr.fit <- ExtractStateFit(msgarch.fit.ml)
 
-save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml"), file="fitted_models.RData")
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+#save(list=c("msgarch.fit.ml", "sr.fit", "garch.fit.ml"), file="fitted_models.RData")
 
 
 # Preliminary Analysis ---------------------------------------------------------
@@ -180,17 +188,15 @@ ggplot() +
   ggtitle("Fitted standardized distributions for the log-returns") +
   ylab("f(y)") +
   xlab("y")
-ggsave(paste(img_dir, "\\FittedStandardizedDistr.pdf", sep=""))
+if (save_plots) ggsave(paste(img_dir, "\\FittedStandardizedDistr.pdf", sep=""))
 
+# Analysis of tails 
+# Log-log plot
 
 # Unconditional volatility levels
 sapply(ExtractStateFit(msgarch.fit.ml), UncVol)
 sapply(ExtractStateFit(garch.fit.ml), UncVol)
 sqrt(mean(train_var))
-
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
 
 # MSGARCH only: in-sample Probabilities
 msgarch.fit.ml.state <- State(msgarch.fit.ml)
@@ -208,7 +214,7 @@ p1 <- ggplot() +
   ggtitle("Predicted in-sample Probability of state 1")
 
 p1
-ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
+if (save_plots) ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
 
 
 # -------------------- In-sample volatility estimate comparison (state1)
@@ -225,7 +231,7 @@ p2 <- ggplot() +
   scale_x_date(date_breaks = "2 years" , date_labels = "%y") + 
   scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color))
 p2
-ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
+if (save_plots) ggsave(paste(img_dir, "\\FiltVola_InSample_Eighties.pdf", sep=""))
 
 #grid.arrange(p1, p2, nrow=2)
 
@@ -242,6 +248,7 @@ testing_anchor_points <- seq(1, (length(test_y)-max(horizons)), 1)
 
 
 # Generating Point Forecasts - Single regime (GARCH) ---------------------------
+
 fcst <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),# TODO: NA instead of -1, hope this doesnt introduce bug
             order.by = index(test_y))
 names(fcst) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
@@ -315,8 +322,8 @@ end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
 
-save(list=c("msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
-           "train_vol", "test_vol"), file="point_forecasts.RData")
+#save(list=c("msgarch_fcst", "garch_fcst", "sr1_fcst", "sr2_fcst", # Point Forecasts
+#           "train_vol", "test_vol"), file="point_forecasts.RData")
 
 # Point Forecast Evaluation
 # Point Forecast Evaluation - Out-of-Sample - Single-step --------
@@ -360,7 +367,7 @@ rownames(avg_err) = "Avg"
 oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
 
 #MSE
-ggplot() + 
+mse_plot <- ggplot() + 
   geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
   geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
@@ -368,21 +375,31 @@ ggplot() +
   scale_x_continuous(breaks=seq(1,10,1)) +
   ylab("MSE") + 
   xlab("Forecasting Horizon") + 
-  ggtitle("OOS-MSE for different Forecasting Horizons")
-
-ggsave(paste(img_dir, "\\OOS-MSE-Multi-Step.pdf", sep=""))
+  ggtitle("OOS Forecast Errors (MSE)")
+mse_plot
+if (save_plots) ggsave(paste(img_dir, "\\OOS-MSE-Multi-Step.pdf", sep=""))
 
 #MAE
-ggplot() + 
+mae_plot <- ggplot() + 
   geom_line(aes(x=1:10, y=msgarch_mserr[, 2], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 2], color="GARCH")) + 
   geom_hline(aes(yintercept=avg_err[, 2], color="Avg")) +
   scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
   scale_x_continuous(breaks=seq(1,10,1)) +
-  ylab("MSE") + 
+  ylab("MAE") + 
   xlab("Forecasting Horizon") + 
-  ggtitle("OOS-MSE for different Forecasting Horizons")
-ggsave(paste(img_dir, "\\OOS-MAE-Multi-Step.pdf", sep=""))
+  ggtitle("OOS Forecast Errors (MAE)")
+mae_plot
+if (save_plots) ggsave(paste(img_dir, "\\OOS-MAE-Multi-Step.pdf", sep=""))
+
+plot_grid(mse_plot, mae_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+if (save_plots) ggsave(paste(img_dir, "\\Forecast-Errors-OOS-Multi-Step.pdf", sep=""))
+
+# Maximum and Minimum percentage-wise improvement
+((oos_eval_multi_step[1:10, ] - oos_eval_multi_step[11:20, ])/oos_eval_multi_step[11:20, ]) %>% sapply(max)
+((oos_eval_multi_step[1:10, ] - oos_eval_multi_step[11:20, ])/oos_eval_multi_step[11:20, ]) %>% sapply(min)
+
+
 
 # Point Forecast Evaluation - In-Sample -------------------------------
 bip <- 100 # burn_in_period
@@ -449,7 +466,7 @@ p2 <- ggplot(msgarch_train_vola) + geom_line(aes(x=Index, y=.)) +
   scale_x_date(date_breaks = "2 years" , date_labels = "%y")
 
 p2
-#ggsave(paste(img_dir, "\\FiltVola_InSample.pdf", sep=""))
+#if (save_plots) ggsave(paste(img_dir, "\\FiltVola_InSample.pdf", sep=""))
 
 
 
@@ -465,21 +482,21 @@ p1 <- ggplot() +
   ylab("Prob") + 
   ggtitle("1-day-ahead volatility forecasts during the Corona Crash")
 p1
-#ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
+#if (save_plots) ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
 
 
 # CORONA POINT FORECAST - MSGARCH Decomposition
 p1 <- ggplot() + 
-  geom_line(data=sr1_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR1_h1, colour="mssr1")) + 
-  geom_line(data=sr2_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR2_h1, colour="mssr2")) + 
-  geom_line(data=garch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=GARCH_h1, colour="garch")) +
+  geom_line(data=sr1_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR1_h1, colour="MSSR1")) + 
+  geom_line(data=sr2_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR2_h1, colour="MSSR2")) + 
+  geom_line(data=garch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
   scale_color_manual(name = "Model", values = c("garch"=garch_color, "mssr1"="brown", "mssr2"="green")) + 
-  scale_x_date(date_breaks = "2 years" , date_labels = "%y") + 
+  scale_x_date(date_breaks = "years" , date_labels = "%y") + 
   xlab("Dates (Year)") + 
-  ylab("Prob") + 
+  ylab("Volatility Forecast") + 
   ggtitle("1-day-ahead volatility forecasts during the Corona Crash")
 p1
-ggsave(paste(img_dir, "\\CoronaCrash_MSGARCH_Decomposition.pdf", sep=""))
+if (save_plots) ggsave(paste(img_dir, "\\CoronaCrash_MSGARCH_Decomposition.pdf", sep=""))
 
 # RUSSIA WAR POINT FORECAST
 p1 <- ggplot() + 
@@ -506,16 +523,9 @@ p1 <- ggplot() +
 p1
 
 
-
-
-
-
-
-
-
-
-
-
-# Density Forecasts - Doesn't work
+# Density Forecasts - Doesn't work --------------------------------------------
 pit <- PIT(msgarch.fit.ml, do.its=TRUE)
 hist(pit, breaks="Scott")
+
+
+

@@ -35,8 +35,10 @@
 
 \usepackage{cleveref}
 \usepackage{acronym}
-
+\usepackage[toc,page]{appendix}
+\usepackage{subfig}
 \graphicspath{{./img/}}
+\usepackage{caption}
 
 
 % ACRONYMS 
@@ -212,83 +214,113 @@ It tries to explain the observation that the volatility of financial assets tend
 The general Markov-switching GARCH specification we use follows \cite{ardia_markov-switching_2019}: 
 Denote $y_t$ the log-returns in time period $t$, i.e. $log(p_t-p_{t-1})$ if $p_t$ is the asset price at time t.
 
-$$y_{t} \mid\left(s_{t}=k, \mathcal{I}_{t-1}\right) \sim \mathcal{D}\left(0, h_{k, t}, \xi_{k}\right)$$
+\begin{equation} \label{eq:msgarch-spec}
+	y_{t} \mid\left(s_{t}=k, \mathcal{I}_{t-1}\right) \sim \mathcal{D}\left(0, h_{k, t}, \Psi_{k}\right)
+\end{equation}
+
+
 
 $\mathcal{D}$ being some zero-mean distribution, the conditional variance$h_{k,t}$ in state $k$ at time $t$ and shape parameters $\xi$. For short time-periods the zero-mean specification is justified most of the time.  $s_t$ is the state at time t is modeled by a Markov chain.\\
 
 A GARCH(1,1) model has the form $h_{k, t} \equiv \alpha_{0, k}+\alpha_{1, k} y_{t-1}^{2}+\beta_{k} h_{k, t-1}$ models the conditional variance process. $h_{k,t}$ is the conditional variance. Similar to an \ac{ARMA} model which tries specify the conditional mean, the \ac{GARCH} model tries to specify the conditional variance. The lagged squared return term can be interpreted as a proxy for the realized variance in the last observation period. 
 In this model long periods of high variance can be modeled by increasing the intercept $\beta$.\\
 
-Many extensions of the GARCH model exist which try to account for the the observation that the variance caused by positive returns don't have the same effect as variance that is caused by negative returns. One example is the GJR model by \cite{glosten_relation_1993}: $$ h_{k, t} \equiv \alpha_{0, k}+\left(\alpha_{1, k}+\alpha_{2, k} \mathbb{I}\left\{y_{t-1}<0\right\}\right) y_{t-1}^2+\beta_k h_{k, t-1}$$
+Many extensions of the GARCH model exist which try to account for the the observation that the variance caused by positive returns don't have the same effect as variance that is caused by negative returns. One example is the GJR model by \cite{glosten_relation_1993}: 
+\begin{equation} \label{eq:GJR}
+	h_{k, t} \equiv \alpha_{0, k}+\left(\alpha_{1, k}+\alpha_{2, k} \mathbb{I}\left\{y_{t-1}<0\right\}\right) y_{t-1}^2+\beta_k h_{k, t-1}
+\end{equation}
 
 However the GARCH model fails to explain many phenomena which are observed, like the fat-tailedness of drawdown periods and depths (cite Robert Frey).
 
-\section{First chapter of main text}
-We try to predict S\&P index using 
+\section{Markov-Switching GARCH}
 
 \subsection{Experiment description}
-We compare the performance of 2 models a stand-alone GARCH model and a MSGARCH model
+In this work we train, evaulate and compare two models for forecasting the density and especially the volatility of future S\&P500 stock returns.
 
-For the GARCH as well as for the MSGARCH models we will use a \ac{SGED} to describe the distribution of the log-returns.
-Also, GJR-GARCH is used for both of the models, see \cref{sss:GARCH}.
+We compare the performance of 2 models, namely a single-state and a two-state markov-switching GARCH model. Henceforth these will be denoted as GARCH and MSGARCH (Markov-Switching GARCH) respectively. The two individual states in the MSGARCH model will be called MSSR1 and MSSR2, which abbreviates Markov-Switching Single-Regime $k$.
+
+For the single-state as well as for the markov-switching models we will use a \ac{SGED} to describe the distribution of the log-returns.
+For the GARCH model as well as for both states of the MSGARCH model, the GJR-GARCH specification is used, in order to make results easily interpretable and comparable.
 
 \subsubsection{Performance Measures}
 When measuring the performance one has to be careful not to compare the square root variance forecasts $\sqrt{h_t}$ with the absolute returns $\sqrt{y_t^2} = | y_t |$ as these would be biased due to Jensen's inequality: Our model tries to achieve $\mathbb{V}(y) =\mathbb{E}(y^2) = h$ and $\mathbb{E}(| y |) \neq \sqrt{h}$. Instead the variance $h_t$ should be compared to the squared returns $y_t^2$.
 
-The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE}
+The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE}.
 
 \subsection{Data set}
-The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance.
+The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance. Both for numerical reasons as well as for the ease of interpretation we will use the log-returns multiplied by 100 for training the model and for the evaluation.
 
 We split our dataset s.t. we use the first 80\% observations for training and the last 20\% for testing the models.
 
 
 \subsection{Results}
-\subsubsection{Analysis of Model Parameters}
-In \cref{tab:model-params} the model parameters are displayed, which were fitted using a maximum likelihood estimator and the training set.
+\subsubsection{Analysis of Model Behaviour and Parameters}
+In \cref{tab:model-params} the model parameters for the (MS-)GARCH model (see \cref{eq:GJR}) and shape parameters $\Psi = (\nu, \xi)$ of the conditional distribution (see ) are displayed, which were fitted using a maximum likelihood estimator on the training set. 
+The two separate states from the MSGARCH model are denoted MSSR1 and MSSR2.
+%TODO: Describe characteristics of MSSR1, MSSR2 and GARCH.
+XXXX is likely to play a role after large volatility spikes like the 1987 Black Monday (see XXXX).
 
 % latex table generated in R 4.1.2 by xtable 1.8-4 package
-% Thu Sep 22 19:29:22 2022
-\begin{table}[ht]
-\label{tab:model-params}
-\centering
-\begin{tabular}{rrrr}
-  \hline
- & MSSR1 & MSSR2 & GARCH \\ 
-  \hline
-$\alpha\_1$ & 0.17 & 0.00 & 0.01 \\ 
-  alpha1\_1 & 0.02 & 0.02 & 0.03 \\ 
-  alpha2\_1 & 0.21 & 0.08 & 0.08 \\ 
-  beta\_1 & 0.75 & 0.94 & 0.92 \\ 
-  nu\_1 & 1.05 & 1.53 & 6.19 \\ 
-  xi\_1 & 0.86 & 0.96 & 0.93 \\ 
-   \hline
-\end{tabular}
-\end{table}
+% Tue Sep 27 12:14:13 2022
+\vspace{0.5cm}
+\begin{minipage}[c]{0.5\textwidth}
+	\begin{tabular}{rrrr}
+		\hline
+		& MSSR1 & MSSR2 & GARCH \\ 
+		\hline
+		$\alpha_{0,1}$ & 0.0042 & 0.1680 & 0.0082 \\ 
+		$\alpha_{1,1}$ & 0.0214 & 0.0168 & 0.0356 \\ 
+		$\alpha_{2,1}$ & 0.0781 & 0.2072 & 0.0741 \\ 
+		$\beta_1$ & 0.9347 & 0.7483 & 0.9207 \\ 
+		$\nu_1$ & 1.5314 & 1.0446 & 1.3168 \\ 
+		$\xi_1$ & 0.9680 & 0.8731 & 0.9329 \\ 
+		\hline
+	\end{tabular}
+	\captionof{table}{Fitted model and shape parameters.}
+	 \label{tab:model-params}
+\end{minipage}
+\begin{minipage}[c]{0.5\textwidth}
+	\begin{tabular}{lrr} 
+		\hline
+		& $t+1 | k=1$ & $t+1 | k=2$ \\
+		\hline
+		$t | k=1$ & 0.9983 & 0.0017 \\
+		$t | k=2$ & 0.0059 & 0.9941 \\
+		\hline
+	\end{tabular}
+	\captionof{table}{Transitions probabilities of the MSGARCH states.}
+ 	\label{tab:trans-probs}
+\end{minipage}
+\vspace{0.5cm}
 
+In \cref{tab:trans-probs} the transitions probabilities for the states in the MSGARCH model are displayed. The stable probabilities (i.e. the long-term probability of being in state 1 or 2) are XXXX for MSSR1 and XXXX for MSSR2.
 
+In \cref{img:single-state-forecasts} one can see the two states of the MSGARCH (MSSR1 and MSSR2) model produce different forecasts and how they compare to the stand-alone GARCH model. 
+It can be observed that MSSR1 is less persistent, which is due to the smaller $\beta_1 = 0.7519$ compared to the larger $\beta_2 = 0.935$ of MSSR2.
+Furthermore we see that MSSR1 has a higher base-level volatility and tends to forecast volatility spikes which are larger than those of MSSR2. This once again, is caused by the larger $\alpha$ values which characterise MSSR1.
 
+\begin{figure}[H]
+	\label{img:single-state-forecasts}
+	\includegraphics[width=\linewidth]{CoronaCrash_MSGARCH_Decomposition.pdf}
+	\caption{One-day-ahead volatility forecasts during the Corona crash 2020. }
+\end{figure}
 
 \subsubsection{Evaluation of Point Forecasts}
 
+\begin{figure}[H]
+	\centering
+	\label{fig:oos-error-multi-step}
+	\includegraphics[width=\textwidth]{Forecast-Errors-OOS-Multi-Step.pdf}
+	\caption{Out-of-sample error measurements for different forecasting horizons and the two models MSGARCH and GARCH.}
+\end{figure}
 
-\begin{table}[ht]
-\centering
-\begin{tabular}{rrrrr}
-  \hline
- & mse & mae & rmse & bias \\ 
-  \hline
-MSGARCH\_h1 & 24.2096 & 1.5169 & 4.9203 & 0.0195 \\ 
-  GARCH\_h1 & 24.9891 & 1.5415 & 4.9989 & 0.0441 \\ 
-  MSSR1\_h1 & 25.2808 & 1.5446 & 5.0280 & 0.0380 \\ 
-  MSSR\_h1 & 25.2808 & 1.5446 & 5.0280 & 0.0380 \\ 
-  Avg & 33.6508 & 1.8815 & 5.8009 & -0.0301 \\ 
-   \hline
-\end{tabular}
-\end{table}
+In \cref{fig:oos-error-multi-step} we can see that MSGARCH has outperformed the GARCH model out-of-sample for every forecasting horizon from 1 to 10 days and for both measures MAE and MSE. 
+A similar plot was generated using the RMSE error measure, which isn't displayed here for brevity, but can be verified in \cref{app:point-forecasts}. 
+The percentage-wise improvement $\frac{e_{GARCH}-e_{MSGARCH}}{e_{GARCH}}$ (where e is the error measure) ranges from 2.14\% to 4\% for MSE and from 0.81\% to 3.2\% for MAE. It is not large, but consistent across error measures and forecasting horizons.
+Both errors increase linearly with respect to the forecasting horizon, tending towards the error obtained by the unconditional volatility estimate.
 
 \begin{figure}[h]
-\includegraphics[width=0.8\linewidth]{pforecast-russia-crash.pdf}
+\includegraphics[width=1.2\linewidth]{pforecast-russia-crash.pdf}
 \caption{One-day-ahead volatility forecasts during the Corona crash 2020.}
 \end{figure}
 
@@ -297,15 +329,7 @@ MSGARCH\_h1 & 24.2096 & 1.5169 & 4.9203 & 0.0195 \\
 \caption{One-day-ahead volatility forecasts during the Corona crash 2020. MSGARCH is model mostly in state 1.}
 \end{figure}
 
-\begin{figure}[h]
-\includegraphics[width=1.2\linewidth]{CoronaCrash\_MSGARCH\_Decomposition.pdf}
-\caption{One-day-ahead volatility forecasts during the Corona crash 2020. MSGARCH is model mostly in state 1.}
-\label{img:cor-decomp}
-\end{figure}
 
-In \cref{img:cor-decomp} one can see the two states of the MSGARCH (MSSR1 and MSSR2) model produce different forecasts and how they compare to the stand-alone GARCH model. 
-It can be observed that MSSR1 is less persistent, which is due to the smaller $\beta_1 = 0.7519$ compared to the larger $\beta_2 = 0.935$ of MSSR2.
-Furthermore we see that MSSR1 has a higher base-level volatility and tends to forecast volatility spikes which are larger than those of MSSR2. This once again, is caused by the larger $\alpha$ values which characterise MSSR1.
 
 \section{Conclusion}
 
@@ -334,9 +358,15 @@ Furthermore we see that MSSR1 has a higher base-level volatility and tends to fo
 \section*{Bibliography}
 In the bibliography, you list all the sources that you use and therefore cite in the text (sources that you have read but not cited should not be listed). Sort the entries in the bibliography, listed according to a consistent style, alphabetically by last name.
 
+
 \bibliography{References}
 \bibliographystyle{Alpha}
 
+\begin{appendices}
+\chapter{Point Forecasts}
+\label{app:point-forecasts}
+
+\end{appendices}
 
 \newpage
 
