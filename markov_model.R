@@ -107,17 +107,19 @@ test_vol = real_vol[(1+split_idx):length(lret)]
 test_var = test_vol^2
 
 
-bear_test_dates <- c(seq.Date(as.Date("2020-02-01"),as.Date("2020-04-01"),by="day"),
-                     seq.Date(as.Date("2021-01-01"),as.Date("2023-01-01"),by="day"))
+russia_war <- seq.Date(as.Date("2021-01-01"),as.Date("2022-08-19"),by="day")
+bear_test_dates <- c(seq.Date(as.Date("2008-01-22"),as.Date("2009-07-08"),by="day"),
+                     seq.Date(as.Date("2020-02-01"),as.Date("2020-04-13"),by="day"),
+                     russia_war)
 bull_test_dates <- index(test_vol)[!(index(test_vol) %in% bear_test_dates)]
   
 
-corona_indices <- seq.Date(as.Date("2020-01-01"),as.Date("2022-05-01"),by="day")
+corona_indices <- seq.Date(as.Date("2020-01-01"),as.Date("2021-01-01"),by="day")
 housing_bubble <- seq.Date(as.Date("2008-01-01"),as.Date("2010-01-01"),by="day")
-russia_war <- seq.Date(as.Date("2021-01-01"),as.Date("2023-01-01"),by="day")
+
+bull_example <- seq.Date(as.Date("2016-01-01"), as.Date("2018-01-01"),by="day")
+
 oil <- seq.Date(as.Date("1986-01-01"),as.Date("1991-01-01"),by="day")
-
-
 eighties <- seq.Date(as.Date("1986-01-01"),as.Date("1990-01-01"),by="day")
 
 
@@ -194,13 +196,46 @@ ggplot() +
   geom_line(aes(x=x_grid, y=sapply(x_grid, h), color="GARCH")) + 
   scale_color_manual(name = "Model", 
                      values = c("GARCH"=garch_color, "MSSR1"=mssr1_color, "MSSR2"=mssr2_color)) + 
-  ggtitle("Fitted standardized distributions for the log-returns") +
+  #ggtitle("Fitted standardized distributions for the log-returns") +
   ylab("f(y)") +
   xlab("y")
 if (save_plots) ggsave(paste(img_dir, "\\FittedStandardizedDistr.pdf", sep=""))
 
 # Analysis of tails 
 # Log-log plot
+f <- function(x) { return(1-psged(x, 0, 1, nu=params[5, 1], xi=params[4, 1])) }
+g <- function(x) { return(1-psged(x, 0, 1, nu=params[5, 2], xi=params[4, 2])) } # TODO: use params here
+h <- function(x) { return(1-psged(x, 0, 1, nu=params[5, 3], xi=params[4, 3])) }
+x_grid <- seq(2, 20, by=10/500)
+ggplot() + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(x_grid, f)%>% log, color="MSSR1")) + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(x_grid, g )%>% log, color="MSSR2" )) + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(x_grid, h )%>% log, color="GARCH")) + 
+  scale_color_manual(name = "Model", 
+                     values = c("GARCH"=garch_color, "MSSR1"=mssr1_color, "MSSR2"=mssr2_color)) + 
+  #ggtitle("Log-Log-Plot for the positive tail") +
+  ylab("log(S(y))") +
+  xlab("log(y)") +
+  ylim(-35, 0)
+if (save_plots) ggsave(paste(img_dir, "\\FittedStandardizedDistrLogLogRight.pdf", sep=""))
+
+# Log-log plot
+f <- function(x) { return(psged(x, 0, 1, nu=params[5, 1], xi=params[4, 1])) }
+g <- function(x) { return(psged(x, 0, 1, nu=params[5, 2], xi=params[4, 2])) } # TODO: use params here
+h <- function(x) { return(psged(x, 0, 1, nu=params[5, 3], xi=params[4, 3])) }
+x_grid <- seq(2, 30, by=10/500)
+ggplot() + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(-x_grid, f)%>% log, color="MSSR1")) + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(-x_grid, g )%>% log, color="MSSR2" )) + 
+  geom_line(aes(x=x_grid %>% log, y=sapply(-x_grid, h )%>% log, color="GARCH")) + 
+  scale_color_manual(name = "Model", 
+                     values = c("GARCH"=garch_color, "MSSR1"=mssr1_color, "MSSR2"=mssr2_color)) + 
+  #ggtitle("Log-Log-Plot for the negative tail") +
+  ylab("log(F(-y))") +
+  xlab("log(y)") +
+  ylim(-35, 0)
+if (save_plots) ggsave(paste(img_dir, "\\FittedStandardizedDistrLogLogLeft.pdf", sep=""))
+
 
 # Unconditional volatility levels
 sapply(ExtractStateFit(msgarch.fit.ml), UncVol)
@@ -318,7 +353,7 @@ names(fcst) = sapply(horizons, function(x) paste("MSGARCH_h", toString(x), sep="
 
 CRPS <- xts(x = cbind(replicate(length(horizons), rep(NA, length(test_y)))),
             order.by = index(test_y))
-names(CRPS) = sapply(horizons, function(x) paste("GARCH_h", toString(x), sep=""))
+names(CRPS) = sapply(horizons, function(x) paste("MSGARCH_h", toString(x), sep=""))
 
 fcst[1, 1] <- predict(msgarch.fit.ml, nahead = 1, do.return.draw = FALSE)$vol[1]
 
@@ -364,29 +399,29 @@ dm.test(msgarch_fcst[,1]^2, garch_fcst[,1]^2, h=1, power = 2)
 end = (length(msgarch_fcst[, 1])-max(horizons)-1)
 start = max(horizons)+1
 
-murphydiagram_diff(as.vector(msgarch_fcst[1:cutoff,1]^2), 
-              as.vector(garch_fcst[1:cutoff,1]^2), 
-              as.vector(test_var$Price)[1:cutoff],)
+murphydiagram_diff(as.vector(msgarch_fcst[start:end,1]^2), 
+              as.vector(garch_fcst[start:end,1]^2), 
+              as.vector(test_var$Price)[start:end],)
 title("h=1")
 p1 <- recordPlot()
 
-murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,2]^2), 
-                   as.vector(garch_fcst[start:cutoff,2]^2), 
-                   as.vector(test_var$Price)[start:cutoff],)
+murphydiagram_diff(as.vector(msgarch_fcst[start:end,2]^2), 
+                   as.vector(garch_fcst[start:end,2]^2), 
+                   as.vector(test_var$Price)[start:end],)
 title("h=2")
 p2 <- recordPlot()
 
-murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,3]^2), 
-                   as.vector(garch_fcst[start:cutoff,3]^2), 
-                   as.vector(test_var$Price)[start:cutoff],)
+murphydiagram_diff(as.vector(msgarch_fcst[start:end,3]^2), 
+                   as.vector(garch_fcst[start:end,3]^2), 
+                   as.vector(test_var$Price)[start:end],)
 title("h=3")
 p3 <- recordPlot()
 
 
 
-murphydiagram_diff(as.vector(msgarch_fcst[start:cutoff,4]^2), 
-                         as.vector(garch_fcst[start:cutoff,4]^2), 
-                         as.vector(test_var$Price)[start:cutoff],)
+murphydiagram_diff(as.vector(msgarch_fcst[start:end,4]^2), 
+                         as.vector(garch_fcst[start:end,4]^2), 
+                         as.vector(test_var$Price)[start:end],)
 title("h=4")
 p4 <- recordPlot()
 
@@ -409,11 +444,19 @@ avg_fcst[index(avg_fcst)] = mean(train_var)
 colnames(avg_fcst) = ""  
 
 msgarch_mserr <- get_err_table(msgarch_fcst^2, test_var)
-#xtable(msgarch_err_table)
 garch_mserr <- get_err_table(garch_fcst^2, test_var)
 avg_err <- get_err_table(avg_fcst, test_var) %>% t %>% as.data.frame
 rownames(avg_err) = "Avg"
 oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
+
+msgarch_mserr <- cbind(msgarch_mserr, msgarch_CRPS %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(msgarch_mserr) <- c(colnames(msgarch_mserr)[1:(ncol(msgarch_mserr)-1)], "CRPS")
+
+garch_mserr <- cbind(garch_mserr, garch_CRPS %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(garch_mserr) <- c(colnames(garch_mserr)[1:(ncol(garch_mserr)-1)], "CRPS")
+
+#xtable(msgarch_mserr)
+#xtable(garch_mserr)
 
 # Point Forecast Evaluation - Out-of-Sample - Multi-step - Bootstrap confindence intervals
 # no normality in the mean probably...
@@ -433,19 +476,18 @@ for (n in 1:N_mc) {
 }
 for (i in 1:nrow(upper_ci95)) {
   for (j in 1:ncol(upper_ci95)) {
-    upper_ci95[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.95)
-    lower_ci05[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.05)
+    upper_ci95[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.90)
+    lower_ci05[i,j] <- boots_err_tables[, i, j] %>% quantile(probs=0.10)
   }
 }
-
+upper_ci95
+lower_ci05
 
 #MSE
 mse_plot <- ggplot() + 
   geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
   geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
   geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
-  geom_line(aes(x=1:10, y=upper_ci95[, 1])) +
-  geom_line(aes(x=1:10, y=lower_ci05[, 1])) +
   scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
   scale_x_continuous(breaks=seq(1,10,1)) +
   ylab("MSE") + 
@@ -467,12 +509,217 @@ mae_plot <- ggplot() +
 mae_plot
 if (save_plots) ggsave(paste(img_dir, "\\OOS-MAE-Multi-Step.pdf", sep=""))
 
-plot_grid(mse_plot, mae_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
-if (save_plots) ggsave(paste(img_dir, "\\Forecast-Errors-OOS-Multi-Step.pdf", sep=""))
+#RMSE
+rmse_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 3], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 3], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("RMSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("OOS Forecast Errors (RMSE)")
+rmse_plot
+if (save_plots) ggsave(paste(img_dir, "\\OOS-RMSE-Multi-Step.pdf", sep=""))
+
+#CRPS
+crps_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 5], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 5], color="GARCH")) + 
+  #geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("CRPS") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("OOS Forecast Errors (CRPS)")
+crps_plot
+
+if (save_plots) ggsave(paste(img_dir, "\\OOS-CRPS-Multi-Step.pdf", sep=""))
+
+
+p <- plot_grid(mse_plot, mae_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-OOS-Multi-Step.pdf", sep=""), p, ncol=2)
+
+p <-plot_grid(rmse_plot, crps_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-OOS-Multi-Step2.pdf", sep=""), p,  ncol=2)
+
+
 
 # Maximum and Minimum percentage-wise improvement
 ((oos_eval_multi_step[1:10, ] - oos_eval_multi_step[11:20, ])/oos_eval_multi_step[11:20, ]) %>% sapply(max)
 ((oos_eval_multi_step[1:10, ] - oos_eval_multi_step[11:20, ])/oos_eval_multi_step[11:20, ]) %>% sapply(min)
+
+
+# Point Forecast Evaluation - OOS-BEAR-Subsample - Multi-step --------
+avg_fcst <- test_var
+avg_fcst[index(avg_fcst)] = mean(train_var)
+colnames(avg_fcst) = ""  
+
+msgarch_mserr <- get_err_table(msgarch_fcst[bear_test_dates]^2, test_var[bear_test_dates])
+garch_mserr <- get_err_table(garch_fcst[bear_test_dates]^2, test_var[bear_test_dates])
+avg_err <- get_err_table(avg_fcst[bear_test_dates], test_var[bear_test_dates]) %>% t %>% as.data.frame
+rownames(avg_err) = "Avg"
+oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
+
+msgarch_mserr <- cbind(msgarch_mserr, msgarch_CRPS[bear_test_dates] %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(msgarch_mserr) <- c(colnames(msgarch_mserr)[1:(ncol(msgarch_mserr)-1)], "CRPS")
+
+garch_mserr <- cbind(garch_mserr, garch_CRPS[bear_test_dates] %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(garch_mserr) <- c(colnames(garch_mserr)[1:(ncol(garch_mserr)-1)], "CRPS")
+
+msgarch_mserr
+garch_mserr 
+
+#MSE
+mse_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bear Market Forecast Errors (MSE)")
+mse_plot
+if (save_plots) ggsave(paste(img_dir, "\\BEAR-MSE-Multi-Step.pdf", sep=""))
+
+#MAE
+mae_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 2], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 2], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 2], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MAE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bear Market Forecast Errors (MAE)")
+mae_plot
+if (save_plots) ggsave(paste(img_dir, "\\BEAR-MAE-Multi-Step.pdf", sep=""))
+
+#RMSE
+rmse_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 3], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 3], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("RMSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bear Market Forecast Errors (RMSE)")
+rmse_plot
+if (save_plots) ggsave(paste(img_dir, "\\BEAR-RMSE-Multi-Step.pdf", sep=""))
+
+#CRPS
+crps_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 5], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 5], color="GARCH")) + 
+  #geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("CRPS") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bear Market Forecast Errors (CRPS)")
+crps_plot
+
+if (save_plots) ggsave(paste(img_dir, "\\BEAR-CRPS-Multi-Step.pdf", sep=""))
+
+
+p <- plot_grid(mse_plot, mae_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-BEAR-Multi-Step.pdf", sep=""), p, ncol=2)
+
+p <-plot_grid(rmse_plot, crps_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-BEAR-Multi-Step2.pdf", sep=""), p,  ncol=2)
+
+
+
+
+# Point Forecast Evaluation - OOS-BULL-Subsample - Multi-step --------
+avg_fcst <- test_var
+avg_fcst[index(avg_fcst)] = mean(train_var)
+colnames(avg_fcst) = ""  
+
+msgarch_mserr <- get_err_table(msgarch_fcst[bull_test_dates]^2, test_var[bull_test_dates])
+garch_mserr <- get_err_table(garch_fcst[bull_test_dates]^2, test_var[bull_test_dates])
+avg_err <- get_err_table(avg_fcst[bull_test_dates], test_var[bull_test_dates]) %>% t %>% as.data.frame
+rownames(avg_err) = "Avg"
+oos_eval_multi_step <- rbind(msgarch_mserr, garch_mserr, avg_err)
+
+msgarch_mserr <- cbind(msgarch_mserr, msgarch_CRPS[bull_test_dates] %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(msgarch_mserr) <- c(colnames(msgarch_mserr)[1:(ncol(msgarch_mserr)-1)], "CRPS")
+
+garch_mserr <- cbind(garch_mserr, garch_CRPS[bull_test_dates] %>% sapply(mean, na.rm=T) %>% t %>% t)
+colnames(garch_mserr) <- c(colnames(garch_mserr)[1:(ncol(garch_mserr)-1)], "CRPS")
+
+msgarch_mserr
+garch_mserr 
+
+#MSE
+mse_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 1], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 1], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 1], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bull Market Forecast Errors (MSE)")
+mse_plot
+if (save_plots) ggsave(paste(img_dir, "\\BULL-MSE-Multi-Step.pdf", sep=""))
+
+#MAE
+mae_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 2], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 2], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 2], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("MAE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bull Market Forecast Errors (MAE)")
+mae_plot
+if (save_plots) ggsave(paste(img_dir, "\\BULL-MAE-Multi-Step.pdf", sep=""))
+
+#RMSE
+rmse_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 3], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 3], color="GARCH")) + 
+  geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color, "Avg"="Black")) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("RMSE") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bull Market Forecast Errors (RMSE)")
+rmse_plot
+if (save_plots) ggsave(paste(img_dir, "\\BULL-RMSE-Multi-Step.pdf", sep=""))
+
+#CRPS
+crps_plot <- ggplot() + 
+  geom_line(aes(x=1:10, y=msgarch_mserr[, 5], color="MSGARCH")) +
+  geom_line(aes(x=1:10, y=garch_mserr[, 5], color="GARCH")) + 
+  #geom_hline(aes(yintercept=avg_err[, 3], color="Avg")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_continuous(breaks=seq(1,10,1)) +
+  ylab("CRPS") + 
+  xlab("Forecasting Horizon") + 
+  ggtitle("Bull Market Forecast Errors (CRPS)")
+crps_plot
+
+if (save_plots) ggsave(paste(img_dir, "\\BULL-CRPS-Multi-Step.pdf", sep=""))
+
+
+p <- plot_grid(mse_plot, mae_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-BULL-Multi-Step.pdf", sep=""), p, ncol=2)
+
+p <-plot_grid(rmse_plot, crps_plot, align = "h", nrow = 1, rel_heights = c(1, 1))
+p
+if (save_plots) save_plot(paste(img_dir, "\\Forecast-Errors-BULL-Multi-Step2.pdf", sep=""), p,  ncol=2)
+
+
 
 
 # Point Forecast Evaluation - In-Sample -------------------------------
@@ -550,15 +797,15 @@ p2
 
 # CORONA POINT FORECAST
 p1 <- ggplot() + 
-  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSGARCH_h1, colour="msgarch")) + 
-  geom_line(data=garch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=GARCH_h1, colour="garch")) +
-  scale_color_manual(name = "Model", values = c("garch"=garch_color, "msgarch"=msgarch_color)) + 
-  scale_x_date(date_breaks = "2 years" , date_labels = "%y") + 
-  xlab("Dates (Year)") + 
+  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSGARCH_h1, colour="MSGARCH")) + 
+  geom_line(data=garch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_date(date_breaks = "4 months" , date_labels = "%m-%y") + 
+  xlab("Dates") + 
   ylab("Prob") + 
   ggtitle("1-day-ahead volatility forecasts during the Corona Crash")
 p1
-#if (save_plots) ggsave(paste(img_dir, "\\PredProb_State1_InSample.pdf", sep=""))
+if (save_plots) ggsave(paste(img_dir, "\\CoronaCrashBear.pdf", sep=""))
 
 
 # CORONA POINT FORECAST - MSGARCH Decomposition
@@ -566,9 +813,9 @@ p1 <- ggplot() +
   geom_line(data=sr1_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR1_h1, colour="MSSR1")) + 
   geom_line(data=sr2_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=MSSR2_h1, colour="MSSR2")) + 
   geom_line(data=garch_fcst[index(msgarch_fcst) %in% corona_indices, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
-  scale_color_manual(name = "Model", values = c("garch"=garch_color, "mssr1"="brown", "mssr2"="green")) + 
-  scale_x_date(date_breaks = "years" , date_labels = "%y") + 
-  xlab("Dates (Year)") + 
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSSR1"="brown", "MSSR2"="green")) + 
+  scale_x_date(date_breaks = "4 months" , date_labels = "%m-%y") + 
+  xlab("Dates") + 
   ylab("Volatility Forecast") + 
   ggtitle("1-day-ahead volatility forecasts during the Corona Crash")
 p1
@@ -576,28 +823,39 @@ if (save_plots) ggsave(paste(img_dir, "\\CoronaCrash_MSGARCH_Decomposition.pdf",
 
 # RUSSIA WAR POINT FORECAST
 p1 <- ggplot() + 
-  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% russia_war, ], aes(x=Index, y=MSGARCH_h1, colour="msgarch")) + 
-  geom_line(data=garch_fcst[index(msgarch_fcst) %in% russia_war, ], aes(x=Index, y=GARCH_h1, colour="garch")) +
-  scale_color_manual(name = "Model", values = c("garch"=garch_color, "msgarch"=msgarch_color)) + 
-  scale_x_date(date_breaks = "2 years" , date_labels = "%y") + 
-  xlab("Dates (Year)") + 
+  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% russia_war, ], aes(x=Index, y=MSGARCH_h1, colour="MSGARCH")) + 
+  geom_line(data=garch_fcst[index(msgarch_fcst) %in% russia_war, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_date(date_breaks = "4 months" , date_labels = "%m-%y") + 
+  xlab("Dates") + 
   ylab("Prob") + 
   ggtitle("1-day-ahead volatility forecasts during the Russian War Crash")
-
 p1
-
+if (save_plots) ggsave(paste(img_dir, "\\RussiaWarBear.pdf", sep=""))
 
 # HOUSING BUBBLE POINT FORECAST
 p1 <- ggplot() + 
-  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% housing_bubble, ], aes(x=Index, y=MSGARCH_h1, colour="msgarch")) + 
-  geom_line(data=garch_fcst[index(msgarch_fcst) %in% housing_bubble, ], aes(x=Index, y=GARCH_h1, colour="garch")) +
-  scale_color_manual(name = "Model", values = c("garch"=garch_color, "msgarch"=msgarch_color)) + 
-  scale_x_date(date_breaks = "2 years" , date_labels = "%y") + 
-  xlab("Dates (Year)") + 
+  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% housing_bubble, ], aes(x=Index, y=MSGARCH_h1, colour="MSGARCH")) + 
+  geom_line(data=garch_fcst[index(msgarch_fcst) %in% housing_bubble, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_date(date_breaks = "4 months" , date_labels = "%m-%y") + 
+  xlab("Dates") + 
   ylab("Prob") + 
   ggtitle("Volatility 1-day-ahead forecasts during the 2008 Crash")
 p1
+if (save_plots) ggsave(paste(img_dir, "\\HousingBubbleBear.pdf", sep=""))
 
+# Bull market POINT FORECAST
+p1 <- ggplot() + 
+  geom_line(data=msgarch_fcst[index(msgarch_fcst) %in% bull_example, ], aes(x=Index, y=MSGARCH_h1, colour="MSGARCH")) + 
+  geom_line(data=garch_fcst[index(msgarch_fcst) %in% bull_example, ], aes(x=Index, y=GARCH_h1, colour="GARCH")) +
+  scale_color_manual(name = "Model", values = c("GARCH"=garch_color, "MSGARCH"=msgarch_color)) + 
+  scale_x_date(date_breaks = "4 months" , date_labels = "%m-%y") + 
+  xlab("Dates") + 
+  ylab("Prob") + 
+  ggtitle("1-day-ahead volatility forecasts between 2016 and 2018")
+p1
+if (save_plots) ggsave(paste(img_dir, "\\BullMarket.pdf", sep=""))
 
 # Density Forecasts - Doesn't work --------------------------------------------
 pit <- PIT(msgarch.fit.ml, do.its=TRUE)

@@ -32,7 +32,7 @@
 % HINZUGEFÜGT VON ADRIAN
 % MAKE subsubsubsection possible
 \usepackage{titlesec}
-
+\usepackage[nottoc]{tocbibind}
 \usepackage{cleveref}
 \usepackage{acronym}
 \usepackage[toc,page]{appendix}
@@ -41,10 +41,12 @@
 \usepackage{caption}
 \usepackage[yyyymmdd]{datetime}
 \usepackage{subcaption}
+\usepackage{bbm}
 %\usepackage[demo]{graphicx}
 
 
 % ACRONYMS 
+\newacro{MSGARCH}{Markov-Switching GARCH}
 \newacro{GARCH}{General Autoregressive Conditional Heteroskedasticity}
 \newacro{ARCH}{Autoregressive Conditional Heteroskedasticity}
 \newacro{ARMA}{AutoRegressive Moving Average}
@@ -55,6 +57,9 @@
 \newacro{RMSE}{root-mean-square error}
 \newacro{MSM}{Markov-Switching Model}
 \newacro{HMM}{Hidden Markov Model}
+\newacro{CRPS}{Continuous Ranked Probability Score}
+\newacro{cdf}{cumulative density function}
+\newacro{MSM}{markov-switching models}
 
 \setcounter{secnumdepth}{4}
 
@@ -171,13 +176,17 @@ Kiel University \\
 \onehalfspacing	
 \section{Introduction}
 Markov chain processes can be useful for identifying regimes in the past as well as estimating the current regime. %% why is this important
-If the Markov model describes the data generating process well, it can also be used to simulate synthetic time series and potential future paths. %% why is this important
+If the \ac{MSM} describes the data generating process well, it can also be used to simulate synthetic time series and potential future paths. %% why is this important
+
+\ac{MSM}s have been a popular approach in modelling non-linear time series dynamics.
+
+\ac{GARCH} models are widely used in order to describe the behaviour of financial time series.
+In this work we want to assess in a case study, if a markov-switching will improve the forecasts of a stand-alone GARCH model.
+
 
 \section{Background}
 \subsection{Markov-Switching Models}
 The general model consists of two stochastic processes $X$ and $Y$. The process $Y$ is observed, e.g. the stock price of a company, and it's conditional distribution depends on the unobserved Markov chain process $X$. According to \cite{an_identifiability_2013}, when the distribution of $y_t$ depends only on $x_t$ it is called a \ac{HMM}, and if it additionally depends  on the lagged values $y_{t-1}, ... y_{t-l}$ we call it a \ac{MSM}.
-
-
 
 There are two main ways to learn the parameters of a HMM model: Expectation-Maximization Algorithms (EM) such as Baum-Welch. And Markov Chain Monte Carlo methods (MCMC) such as the Metropolis-Hastings or Gibbs Sampling algorithm.
 
@@ -207,15 +216,44 @@ Fat-tailed. Power-law. Daily vs Monthly frequencies.
 
 \subsubsection{Distributions}
 Many different distributions have been suggested for modeling asset returns and volatility, among them the log-normal, students-t and the \ac{GED} and stable tempered distributions. 
-In this paper we will consider the (Log-)normal, the \ac{GED} and the Student-t distribution, given the difficulty of implementing algorithms using more advanced distributions such as the stable tempered distribution. The following three distributions are in standardized form, i.e. they are centered around 0 and have a standard deviation of 1.
-
-\paragraph{Normal Distribution}
-$$f_N(\eta) \equiv \frac{1}{\sqrt{2 \pi}} e^{-\frac{1}{2} \eta^2}$$
+In this paper we will consider  \ac{GED}, given the difficulty of implementing algorithms using more advanced distributions such as the stable tempered distribution. 
 
 \paragraph{Generalized Error Distribution}
-$$f_{\mathrm{GED}}(\eta ; \nu) \equiv \frac{\nu e^{-\frac{1}{2}|\eta / \lambda|^\nu}}{\lambda 2^{(1+1 / \nu)} \Gamma(1 / \nu)}, \quad \lambda \equiv\left(\frac{\Gamma(1 / \nu)}{4^{1 / \nu} \Gamma(3 / \nu)}\right)^{1 / 2}$$
-\paragraph{Student-t Distribution}
-$$f_S(\eta ; \nu) \equiv \frac{\Gamma\left(\frac{\nu+1}{2}\right)}{\sqrt{(\nu-2) \pi} \Gamma\left(\frac{\nu}{2}\right)}\left(1+\frac{\eta^2}{(\nu-2)}\right)^{-\frac{\nu+1}{2}}$$
+\begin{equation} \label{eq:ged}
+f_{\mathrm{GED}}(\eta ; \nu) \equiv \frac{\nu e^{-\frac{1}{2}|\eta / \lambda|^\nu}}{\lambda 2^{(1+1 / \nu)} \Gamma(1 / \nu)}, \quad \lambda \equiv\left(\frac{\Gamma(1 / \nu)}{4^{1 / \nu} \Gamma(3 / \nu)}\right)^{1 / 2}
+\end{equation}
+where $\nu$ is the shape parameter and $\lambda$ the scale parameter the density function.
+
+\paragraph{Skewness}
+Since the densities of financial stochastic processes are usually skewed, a method of introducing this property to the symmetric density \cref{eq:ged} is required. Given a standardized, symmetric unimodal density, Trottier and Ardia suggest the following transformation, which doesn't change neither the mean nor the variance (see \cite{trottier_moments_2015}). The degree of skewness is parametrized by $0<\xi<\infty$:
+\begin{equation} \label{eq:skewness}
+	f_{\xi}(z) \equiv \frac{2 \sigma_{\xi}}{\xi+\xi^{-1}} f_1\left(z_{\xi}\right), \quad z_{\xi} \equiv \begin{cases}\xi^{-1}\left(\sigma_{\xi} z+\mu_{\xi}\right) & \text { if } z \geq-\mu_{\xi} / \sigma_{\xi} \\ \xi\left(\sigma_{\xi} z+\mu_{\xi}\right) & \text { if } z<-\mu_{\xi} / \sigma_{\xi}\end{cases}
+\end{equation} 
+where $\mu_{\xi} \equiv M_1\left(\xi-\xi^{-1}\right), \quad \sigma_{\xi}^2 \equiv\left(1-M_1^2\right)\left(\xi^2+\xi^{-2}\right)+2 M_1^2-1, \quad M_1 \equiv 2 \int_0^{\infty} u f_1(u) d u$. .
+
+\subsection{Error Measures}\label{sec:error-measures}
+
+\subsubsection*{\ac{MSE}}
+\begin{equation}
+	\operatorname{MSE}=\frac{\sum_{t=1}^T\left(\hat{y}_t-y_t\right)^2}{T}
+\end{equation}
+
+\subsubsection*{\ac{MAE}}
+\begin{equation}
+	\operatorname{MAE}=\frac{\sum_{t=1}^T |\hat{y}_t-y_t |}{T}
+\end{equation}
+
+\subsubsection*{\ac{RMSE}}
+\begin{equation}
+	\operatorname{RMSE}=\sqrt{\frac{\sum_{t=1}^T\left(\hat{y}_t-y_t\right)^2}{T}}
+\end{equation}
+
+\subsubsection*{\ac{CRPS}}
+The \ac{CRPS} is defined as:
+\begin{equation}
+	\operatorname{CRPS}(F_t, y_t)=\int_{\mathbb{R}}[F(x) - \mathbbm{1} (x \geq y_t)]^2 \mathrm{~d} x
+\end{equation}
+Herer $F_t$ is the predicted \ac{cdf} for $y_t$, the observed value. The average CRPS over a set of observations can then be used as an error measure. One of the advantages of the CRPS is that it doesn't require a density and can handle distributions with point mass such as the empirical \ac{cdf}.
 
 \subsubsection{GARCH}
 \label{sss:GARCH}
@@ -258,21 +296,22 @@ For training the model and producing the forecasts we use the R package 'MSGARCH
 \subsubsection{Performance Measures}
 When measuring the performance one has to be careful not to compare the square root variance forecasts $\sqrt{h_t}$ with the absolute returns $\sqrt{y_t^2} = | y_t |$ as these would be biased due to Jensen's inequality: Our model tries to achieve $\mathbb{V}(y) =\mathbb{E}(y^2) = h$ and $\mathbb{E}(| y |) \neq \sqrt{h}$. Instead the variance $h_t$ should be compared to the squared returns $y_t^2$.
 
-The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE}.
+The actual measures we employ are the following: \ac{MSE}, \ac{MAE}, \ac{RMSE} and the average \ac{CRPS}, see \cref{sec:error-measures}.
 
 \subsubsection{Data set}
-Our data set 
+The data set consists of the SPX daily close ranging from \formatdate{03}{01}{1928} to \formatdate{21}{08}{2022}. The data is obtained from Yahoo Finance\footnote{https://finance.yahoo.com/}.
+
+This data set is split s.t. the first 80\% observations are used for training and the last 20\% for testing the models.
 
 The GARCH model assumes that the datapoints are equidistant in the time dimension, hence we will use the closing prices of the Index and model the close-to-close variance. Both for numerical reasons as well as for the ease of interpretation we will use the log-returns multiplied by 100 for training the model and for the evaluation.
 
-We split our dataset s.t. we use the first 80\% observations for training and the last 20\% for testing the models.
-
 
 \subsection{Results}
-\subsubsection{Model Selection}
-
 
 \subsubsection{Analysis of Model Behaviour and Parameters}
+
+%TODO add insample state probabilities
+
 In \cref{tab:model-params} the model parameters for the (MS-)GARCH model (see \cref{eq:GJR}) and shape parameters $\Psi = (\nu, \xi)$ of the conditional distribution (see ) are displayed, which were fitted using a maximum likelihood estimator on the training set. 
 The two separate states from the MSGARCH model are denoted MSSR1 and MSSR2.
 %TODO: Describe characteristics of MSSR1, MSSR2 and GARCH.
@@ -311,7 +350,30 @@ XXXX is likely to play a role after large volatility spikes like the 1987 Black 
 \end{minipage}
 \vspace{0.5cm}
 
-In \cref{tab:trans-probs} the transitions probabilities for the markov chain states in the MSGARCH model are displayed. The stable probabilities (i.e. the long-term probability of being in state 1 or 2) are XXXX for MSSR1 and XXXX for MSSR2.
+In \cref{tab:trans-probs} the transitions probabilities for the markov chain states in the MSGARCH model are displayed. The stable probabilities (i.e. the long-term probability of being in state 1 or 2) are 77.32\% for MSSR1 and 22.68\% for MSSR2.
+
+\begin{figure}[H]
+	\begin{subfigure}{1\textwidth}
+	\centering
+	\includegraphics[width=0.7\linewidth]{FittedStandardizedDistr.pdf}
+	\caption{Probability distribution functions}
+	\end{subfigure} \\
+	\begin{subfigure}{.5\textwidth}
+		\centering
+		\includegraphics[width=1\linewidth]{FittedStandardizedDistrLogLogRight.pdf}
+		\caption{Log-log plot for the positive tails}
+	\end{subfigure}
+	\begin{subfigure}{.5\textwidth}
+	\centering
+	\includegraphics[width=1\linewidth]{FittedStandardizedDistrLogLogLeft.pdf}
+	\caption{Log-log-plot for the negative tails} \label{fig:distributions-left-tail}
+	\end{subfigure}
+	\caption{}
+	\label{fig:distributions}
+\end{figure}
+
+In \cref{fig:distributions} the probability density functions of each sate and their tail behaviours are displayed.
+In the log-log-plots one observe see the heavier tails of MSSR2 compared to the other two densities, especially in the negative tail.
 
 In \cref{img:single-state-forecasts} one can see the two states of the MSGARCH (MSSR1 and MSSR2) model produce different forecasts and how they compare to the stand-alone GARCH model. 
 It can be observed that MSSR1 is less persistent, which is due to the smaller $\beta_1 = 0.7519$ compared to the larger $\beta_2 = 0.935$ of MSSR2.
@@ -326,75 +388,98 @@ Furthermore we see that MSSR1 has a higher base-level volatility and tends to fo
 %TODO insample performance evaluation ?
 
 \subsubsection{Out-of-Sample Evaluation}
-We evaluated the performance of our model in an out-of-sample dataset ranging from \formatdate{02}{10}{2003} to \formatdate{19}{08}{2022}. For every date we produce point and density forecasts via simulation with a forecasting horizon ranging from 1 to 10 trading days.
+We evaluated the performance of our model in an out-of-sample dataset ranging from \formatdate{02}{10}{2003} to \formatdate{19}{08}{2022}. For every date the point and density forecasts are produced via simulation with a forecasting horizon ranging from 1 to 10 trading days. For this purpose 10000 future paths with length 10 are simulated at each step.
 
 \begin{figure}[H]
-	\centering
 	\label{fig:oos-error-multi-step}
+	\begin{subfigure}{1.2\textwidth}
+	\centering
 	\includegraphics[width=\textwidth]{Forecast-Errors-OOS-Multi-Step.pdf}
+	\end{subfigure}
+
+	\begin{subfigure}{1.2\textwidth}
+	\centering
+	\includegraphics[width=\textwidth]{Forecast-Errors-OOS-Multi-Step2.pdf}
+	\end{subfigure}
 	\caption{Out-of-sample error measurements for different forecasting horizons and the two models MSGARCH and GARCH.}
 \end{figure}
 
 
-In \cref{fig:oos-error-multi-step} we can see that MSGARCH has outperformed the GARCH model out-of-sample for every forecasting horizon from 1 to 10 days and for both measures MAE and MSE. 
-A similar plot was generated using the RMSE error measure, which isn't displayed here for brevity, but can be verified in \cref{app:point-forecasts}. 
+In \cref{fig:oos-error-multi-step} we can see that MSGARCH has slightly outperformed the GARCH model out-of-sample for every forecasting horizon from 1 to 10 days and for the three measures \ac{MSE}, \ac{MAE} and \ac{RMSE}. The density forecasts were even more similar in performance, here the GARCH model even  achieved slightly lower, i.e. better \ac{CRPS} values.
+
 The percentage-wise improvement $\frac{e_{GARCH}-e_{MSGARCH}}{e_{GARCH}}$ (where e is the error measure) ranges from 2.14\% to 4\% for MSE and from 0.81\% to 3.2\% for MAE. It is not large, but consistent across error measures and forecasting horizons.
 Both errors increase linearly with respect to the forecasting horizon, tending towards the error obtained by the unconditional volatility estimate.
 
-% TODO: Diebold-Mariano test
+%TODO: Error intervals
 
 
-In \cref{fig:murphy-diagrams} the difference of the two forecasts in the murphy diagram are displayed. It can't be observed that any forecasting model dominates the other. This means that it depends on the error measure, whether the single-state GARCH or the MSGARCH forecasts produce smaller, more desireable quantities.
-For an explanation of murphy diagrams, see \cite{ehm_quantiles_2016} Sections 3 and 4.
+In \cref{fig:murphy-diagrams} the difference of the two forecasts in the murphy diagram are displayed. It can't be observed that any forecasting model dominates the other. This means that it depends on the error measure, whether the single-state GARCH or the MSGARCH forecasts produce smaller, more desireable errors.
+Neither forecast is strictly better for all scoring rules which are consistent for the mean. For an explanation of murphy diagrams, see \cite{ehm_quantiles_2016} Sections 3 and 4.
 
 \begin{figure}[H]
 	\begin{subfigure}{.5\textwidth}
 		\centering
 		\includegraphics[width=.8\linewidth]{murph1.pdf}
 		\caption{1a}
-		\label{fig:sfig1}
 	\end{subfigure}%
 	\begin{subfigure}{.5\textwidth}
 		\centering
 		\includegraphics[width=.8\linewidth]{murph2.pdf}
 		\caption{1b}
-		\label{fig:sfig2}
 	\end{subfigure}
 	\begin{subfigure}{.5\textwidth}
 	\centering
 	\includegraphics[width=.8\linewidth]{murph3.pdf}
 	\caption{1b}
-	\label{fig:sfig2}
 \end{subfigure}
 	\begin{subfigure}{.5\textwidth}
 	\centering
 	\includegraphics[width=.8\linewidth]{murph4.pdf}
 	\caption{1b}
-	\label{fig:sfig2}
 \end{subfigure}
 	\caption{Plots showing the difference in the extremal scores of the MSGARCH and the GARCH forecasts for horizons 1-4.}
 	\label{fig:murphy-diagrams}
 \end{figure}
 
 
+\subsection{Subsample Performance}
+We further analyze the performance for two subsamples, which are categorized into a bull market and a bear market. For the bear market subsample we take the periods of 
+\formatdate{22}{01}{2008} \textendash \formatdate{08}{07}{2009}, \formatdate{01}{02}{2020} \textendash \formatdate{13}{04}{2020} and \formatdate{01}{01}{2022} \textendash \formatdate{21}{08}{2022}.
 
-% TODO CRPS analysis
-
-
-\begin{figure}[h]
-\includegraphics[width=1.2\linewidth]{pforecast-russia-crash.pdf}
-\caption{One-day-ahead volatility forecasts during the Corona crash 2020.}
+\subsubsection{Bear Markets}
+\begin{figure}[H]
+	\label{fig:bear-error-multi-step}
+	\begin{subfigure}{1.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{Forecast-Errors-BEAR-Multi-Step.pdf}
+	\end{subfigure}
+	
+	\begin{subfigure}{1.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{Forecast-Errors-BEAR-Multi-Step2.pdf}
+	\end{subfigure}
+	\caption{Out-of-sample bear market subsample error measurements for different forecasting horizons and the two models MSGARCH and GARCH.}
 \end{figure}
 
-\begin{figure}[h]
-\includegraphics[width=1.2\linewidth]{FiltVola\_InSample\_Eighties.pdf}
-\caption{One-day-ahead volatility forecasts during the Corona crash 2020. MSGARCH is model mostly in state 1.}
+% TODO: Add scenario pictures
+
+\subsubsection{Bull Markets}
+\begin{figure}[H]
+	\label{fig:bull-error-multi-step}
+	\begin{subfigure}{1.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{Forecast-Errors-BULL-Multi-Step.pdf}
+	\end{subfigure}
+	
+	\begin{subfigure}{1.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{Forecast-Errors-BULL-Multi-Step2.pdf}
+	\end{subfigure}
+	\caption{Out-of-sample bull market subsample error measurements for different forecasting horizons.}
 \end{figure}
-
-
 
 \section{Conclusion}
-
+In this work the compared and analyzed the forecasting performance of a GARCH model with a \ac*{MSGARCH} for the S\&P using daily returns ranging from 1928 to 2022. We evaluated density forecasts as well as point forecasts for the volatility for different forecasting horizons. In this experiment we didn't see any significant evidence that would suggest that the markov-switching model produced superior forecasts compared to the single-regime \ac{GARCH} model. More experiments will have to be performed, including different model specifications, time horizons and indices in order to evaluate, if the markov-switching approach adds value in this setting.
 
 \newpage
 
@@ -416,13 +501,9 @@ For an explanation of murphy diagrams, see \cite{ehm_quantiles_2016} Sections 3 
 \newpage\clearpage
 
 \newpage
-\addcontentsline{toc}{section}{Bibliography}
-\section*{Bibliography}
-In the bibliography, you list all the sources that you use and therefore cite in the text (sources that you have read but not cited should not be listed). Sort the entries in the bibliography, listed according to a consistent style, alphabetically by last name.
-
-
 \bibliography{References}
 \bibliographystyle{Alpha}
+
 
 \begin{appendices}
 %TODO add tables here
